@@ -37,6 +37,7 @@ import {
   Eye,
   ArrowLeft,
 } from "lucide-react";
+import { fetchApi } from "../lib/api";
 
 interface Position {
   id: number;
@@ -138,7 +139,7 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
       const initialUrl = `/api/v1/positions?page=1&page_size=100`;
       console.log(`📄 Fetching initial page: ${initialUrl}`);
 
-      const initialResponse = await fetch(initialUrl);
+      const initialResponse = await fetchApi(initialUrl);
 
       if (!initialResponse.ok) {
         const errorText = await initialResponse.text();
@@ -168,7 +169,7 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
         for (let page = 2; page <= initialData.pagination.total_pages; page++) {
           const pageUrl = `/api/v1/positions?page=${page}&page_size=100`;
           fetchPromises.push(
-            fetch(pageUrl)
+            fetchApi(pageUrl)
               .then((response) => {
                 if (response.ok) {
                   return response.json();
