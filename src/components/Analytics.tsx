@@ -446,6 +446,212 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
     const correlations = [];
     const seasonality = [];
 
+    // Define main/popular coins for comparison
+    const mainCoins = [
+      "BTC",
+      "ETH",
+      "USDT",
+      "BNB",
+      "SOL",
+      "XRP",
+      "USDC",
+      "ADA",
+      "AVAX",
+      "DOGE",
+      "TRX",
+      "DOT",
+      "MATIC",
+      "LTC",
+      "SHIB",
+      "BCH",
+      "NEAR",
+      "UNI",
+      "ATOM",
+      "FTM",
+      "LINK",
+      "APT",
+      "ICP",
+      "FIL",
+      "ARB",
+      "VET",
+      "MKR",
+      "AAVE",
+      "GRT",
+      "SAND",
+    ];
+
+    // Helper function to check if asset is a main coin
+    const isMainCoin = (asset: string) => {
+      if (!asset) return false;
+      const upperAsset = asset.toUpperCase();
+      return mainCoins.some((coin) => upperAsset.includes(coin));
+    };
+
+    // Unusual: High confidence traders on random/less common coins
+    const highConfidenceRandomCoins = allPositions.filter((p) => {
+      const hasHighLeverage = (p.leverage || 0) > 30;
+      const hasLargeMoney =
+        (p.size || 0) > 500000 || Math.abs(p.pnl || 0) > 25000;
+      const isRandomCoin = p.asset && !isMainCoin(p.asset);
+      const hasHighConfidence = hasHighLeverage || hasLargeMoney;
+
+      return isRandomCoin && hasHighConfidence;
+    });
+
+    if (highConfidenceRandomCoins.length > 0) {
+      const uniqueAssets = [
+        ...new Set(highConfidenceRandomCoins.map((p) => p.asset)),
+      ];
+      const avgLeverage =
+        highConfidenceRandomCoins.reduce(
+          (sum, p) => sum + (p.leverage || 0),
+          0,
+        ) / highConfidenceRandomCoins.length;
+      const totalValue = highConfidenceRandomCoins.reduce(
+        (sum, p) => sum + (p.size || 0),
+        0,
+      );
+
+      unusualPatterns.push({
+        type: "High Confidence Bets on Obscure Coins",
+        description: `${highConfidenceRandomCoins.length} positions on ${uniqueAssets.length} lesser-known coins with high leverage (avg ${avgLeverage.toFixed(1)}x) or large amounts (${(totalValue / 1000000).toFixed(1)}M total)`,
+        count: highConfidenceRandomCoins.length,
+        significance: "high",
+        impact: "Potential insider knowledge or high-risk speculation",
+        details: {
+          assets: uniqueAssets.slice(0, 5),
+          avgLeverage: avgLeverage,
+          totalValue: totalValue,
+          positions: highConfidenceRandomCoins.slice(0, 3).map((p) => ({
+            asset: p.asset,
+            leverage: p.leverage,
+            size: p.size,
+            pnl: p.pnl,
+            direction: p.is_long ? "Long" : "Short",
+          })),
+        },
+      });
+    }
+
+    // Unusual: Extreme leverage on any coin (>75x)
+    const ultraHighLeverage = allPositions.filter(
+      (p) => (p.leverage || 0) > 75,
+    );
+    if (ultraHighLeverage.length > 0) {
+      const avgPnL =
+        ultraHighLeverage.reduce((sum, p) => sum + (p.pnl || 0), 0) /
+        ultraHighLeverage.length;
+      const uniqueAssets = [...new Set(ultraHighLeverage.map((p) => p.asset))];
+
+      unusualPatterns.push({
+        type: "Ultra High Leverage Trading (>75x)",
+        description: `${ultraHighLeverage.length} positions with extreme leverage >75x across ${uniqueAssets.length} assets, avg PnL: ${avgPnL.toFixed(0)}`,
+        count: ultraHighLeverage.length,
+        significance: "high",
+        impact: "Extremely high risk, potential for massive gains/losses",
+        details: {
+          assets: uniqueAssets,
+          avgPnL: avgPnL,
+          maxLeverage: Math.max(
+            ...ultraHighLeverage.map((p) => p.leverage || 0),
+          ),
+          positions: ultraHighLeverage.slice(0, 3).map((p) => ({
+            asset: p.asset,
+            leverage: p.leverage,
+            pnl: p.pnl,
+            direction: p.is_long ? "Long" : "Short",
+          })),
+        },
+      });
+    }
+
+    // Unusual: Large money positions on random coins
+    const largeBetsRandomCoins = allPositions.filter((p) => {
+      const hasLargeMoney = (p.size || 0) > 1000000; // >$1M position size
+      const isRandomCoin = p.asset && !isMainCoin(p.asset);
+      return isRandomCoin && hasLargeMoney;
+    });
+
+    if (largeBetsRandomCoins.length > 0) {
+      const totalValue = largeBetsRandomCoins.reduce(
+        (sum, p) => sum + (p.size || 0),
+        0,
+      );
+      const uniqueAssets = [
+        ...new Set(largeBetsRandomCoins.map((p) => p.asset)),
+      ];
+      const avgPnL =
+        largeBetsRandomCoins.reduce((sum, p) => sum + (p.pnl || 0), 0) /
+        largeBetsRandomCoins.length;
+
+      unusualPatterns.push({
+        type: "Million Dollar Bets on Obscure Coins",
+        description: `${largeBetsRandomCoins.length} positions >$1M each on lesser-known coins (${uniqueAssets.length} assets, ${(totalValue / 1000000).toFixed(1)}M total, avg PnL: ${avgPnL.toFixed(0)})`,
+        count: largeBetsRandomCoins.length,
+        significance: "high",
+        impact:
+          "Whale activity on small caps - potential market manipulation or insider info",
+        details: {
+          assets: uniqueAssets,
+          totalValue: totalValue,
+          avgPnL: avgPnL,
+          positions: largeBetsRandomCoins.slice(0, 3).map((p) => ({
+            asset: p.asset,
+            size: p.size,
+            pnl: p.pnl,
+            direction: p.is_long ? "Long" : "Short",
+          })),
+        },
+      });
+    }
+
+    // Unusual: Perfect timing on random coins (high PnL in short time)
+    const perfectTimingRandomCoins = allPositions.filter((p) => {
+      if (!p.created_at || !p.asset) return false;
+      const createdTime = new Date(p.created_at).getTime();
+      const isRecent = createdTime > currentTime - 14 * 24 * 60 * 60 * 1000; // Last 14 days
+      const hasHighPnL = (p.pnl || 0) > 10000;
+      const isRandomCoin = !isMainCoin(p.asset);
+      return isRecent && hasHighPnL && isRandomCoin;
+    });
+
+    if (perfectTimingRandomCoins.length > 0) {
+      const avgPnL =
+        perfectTimingRandomCoins.reduce((sum, p) => sum + (p.pnl || 0), 0) /
+        perfectTimingRandomCoins.length;
+      const uniqueAssets = [
+        ...new Set(perfectTimingRandomCoins.map((p) => p.asset)),
+      ];
+      const totalPnL = perfectTimingRandomCoins.reduce(
+        (sum, p) => sum + (p.pnl || 0),
+        0,
+      );
+
+      unusualPatterns.push({
+        type: "Perfect Timing on Obscure Coins",
+        description: `${perfectTimingRandomCoins.length} positions with >$10K profit in <14 days on lesser-known coins (${uniqueAssets.length} assets, ${(totalPnL / 1000).toFixed(0)}K total profit)`,
+        count: perfectTimingRandomCoins.length,
+        significance: "high",
+        impact:
+          "Exceptional timing or potential insider knowledge on small caps",
+        details: {
+          assets: uniqueAssets.slice(0, 5),
+          avgPnL: avgPnL,
+          totalPnL: totalPnL,
+          positions: perfectTimingRandomCoins.slice(0, 3).map((p) => ({
+            asset: p.asset,
+            pnl: p.pnl,
+            leverage: p.leverage,
+            direction: p.is_long ? "Long" : "Short",
+            daysAgo: Math.floor(
+              (currentTime - new Date(p.created_at!).getTime()) /
+                (24 * 60 * 60 * 1000),
+            ),
+          })),
+        },
+      });
+    }
+
     // Unusual: Very high PnL with low entry price
     const highPnLLowEntry = allPositions.filter(
       (p) => (p.pnl || 0) > 10000 && (p.entry_price || 0) < 100,
@@ -1891,9 +2097,49 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
                     analytics.patterns.unusual.map((pattern, index) => (
                       <Alert key={index}>
                         <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>{pattern.type}</AlertTitle>
-                        <AlertDescription>
-                          {pattern.description}
+                        <AlertTitle className="flex items-center gap-2">
+                          {pattern.type}
+                          <Badge
+                            variant={
+                              pattern.significance === "high"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                            className="text-xs"
+                          >
+                            {pattern.significance}
+                          </Badge>
+                        </AlertTitle>
+                        <AlertDescription className="space-y-2">
+                          <div>{pattern.description}</div>
+                          <div className="text-xs text-muted-foreground italic">
+                            Impact: {pattern.impact}
+                          </div>
+                          {pattern.details && (
+                            <div className="mt-3 p-2 bg-muted rounded text-xs space-y-1">
+                              {pattern.details.assets && (
+                                <div>
+                                  <strong>Assets:</strong>{" "}
+                                  {pattern.details.assets.join(", ")}
+                                </div>
+                              )}
+                              {pattern.details.positions && (
+                                <div className="space-y-1">
+                                  <strong>Sample Positions:</strong>
+                                  {pattern.details.positions.map((pos, i) => (
+                                    <div key={i} className="ml-2">
+                                      • {pos.asset}: {pos.direction}{" "}
+                                      {pos.leverage && `${pos.leverage}x`}{" "}
+                                      {pos.size &&
+                                        `${(pos.size / 1000).toFixed(0)}K`}{" "}
+                                      {pos.pnl && `PnL: ${pos.pnl.toFixed(0)}`}{" "}
+                                      {pos.daysAgo && `(${pos.daysAgo}d ago)`}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </AlertDescription>
                       </Alert>
                     ))

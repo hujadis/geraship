@@ -502,19 +502,25 @@ const PositionsTable = () => {
       !position.entry_price ||
       position.pnl == null ||
       !position.size ||
-      position.size === 0
+      position.size === 0 ||
+      !position.leverage
     ) {
       return null;
     }
 
-    // Calculate price change per unit
-    const priceChangePerUnit = position.pnl / position.size;
+    // Calculate the initial investment (margin)
+    const initialValue =
+      Math.abs(position.size * position.entry_price) / position.leverage;
 
-    // For long positions: Current Price = Entry Price + (PNL / Position Size)
-    // For short positions: Current Price = Entry Price - (PNL / Position Size)
+    // Calculate the percentage return on the initial investment
+    const returnPercentage = position.pnl / initialValue;
+
+    // Calculate current price based on position direction
+    // For long positions: current_price = entry_price * (1 + return_percentage / leverage)
+    // For short positions: current_price = entry_price * (1 - return_percentage / leverage)
     const currentPrice = position.is_long
-      ? position.entry_price + priceChangePerUnit
-      : position.entry_price - priceChangePerUnit;
+      ? position.entry_price * (1 + returnPercentage / position.leverage)
+      : position.entry_price * (1 - returnPercentage / position.leverage);
 
     return currentPrice;
   };
