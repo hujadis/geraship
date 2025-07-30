@@ -224,6 +224,60 @@ const WalletDetails = ({
     const maxLoss = Math.min(...positions.map((p) => p.pnl || 0), 0);
     const totalVolume = positions.reduce((sum, p) => sum + (p.size || 0), 0);
 
+    // Trading style analysis
+    const positionDurations = positions
+      .filter((p) => p.created_at && p.updated_at)
+      .map((p) => {
+        const created = new Date(p.created_at!);
+        const updated = new Date(p.updated_at!);
+        return (updated.getTime() - created.getTime()) / (1000 * 60 * 60 * 24); // days
+      });
+
+    const avgPositionDuration =
+      positionDurations.length > 0
+        ? positionDurations.reduce((sum, duration) => sum + duration, 0) /
+          positionDurations.length
+        : 0;
+
+    const dayTradingPositions = positionDurations.filter((d) => d < 1).length;
+    const swingTradingPositions = positionDurations.filter(
+      (d) => d >= 1 && d <= 7,
+    ).length;
+    const longTermPositions = positionDurations.filter((d) => d > 7).length;
+
+    let tradingStyle = "Mixed";
+    const totalAnalyzedPositions =
+      dayTradingPositions + swingTradingPositions + longTermPositions;
+    if (totalAnalyzedPositions > 0) {
+      const dayTradingRatio = dayTradingPositions / totalAnalyzedPositions;
+      const swingTradingRatio = swingTradingPositions / totalAnalyzedPositions;
+      const longTermRatio = longTermPositions / totalAnalyzedPositions;
+
+      if (dayTradingRatio > 0.6) tradingStyle = "Day Trader";
+      else if (swingTradingRatio > 0.5) tradingStyle = "Swing Trader";
+      else if (longTermRatio > 0.4) tradingStyle = "Long Term Trader";
+    }
+
+    // High PnL position holding analysis
+    const highPnlActivePositions = positions.filter(
+      (p) => p.status === "active" && (p.pnl || 0) > 1000,
+    ).length;
+
+    const avgLeverage =
+      positions.filter((p) => p.leverage).length > 0
+        ? positions
+            .filter((p) => p.leverage)
+            .reduce((sum, p) => sum + (p.leverage || 0), 0) /
+          positions.filter((p) => p.leverage).length
+        : 0;
+
+    const riskTolerance =
+      avgLeverage > 10
+        ? "High Risk"
+        : avgLeverage > 5
+          ? "Medium Risk"
+          : "Low Risk";
+
     // Calculate closed trades statistics
     const closedTradesPositions = positions.filter(
       (p) => p.status !== "active",
@@ -280,6 +334,14 @@ const WalletDetails = ({
       closedWinningTrades,
       closedLosingTrades,
       closedWinRate,
+      avgPositionDuration,
+      tradingStyle,
+      dayTradingPositions,
+      swingTradingPositions,
+      longTermPositions,
+      highPnlActivePositions,
+      avgLeverage,
+      riskTolerance,
     };
   }, [walletPositions]);
 
@@ -403,6 +465,15 @@ const WalletDetails = ({
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4,
+    }).format(value);
+  };
+
+  const formatCurrencyBasic = (value: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value);
@@ -420,7 +491,7 @@ const WalletDetails = ({
     if (!position.size || !position.entry_price || !position.leverage) {
       return null;
     }
-    return (position.size * position.entry_price) / position.leverage;
+    return (Math.abs(position.size) * position.entry_price) / position.leverage;
   };
 
   const calculateCorrectPnlPercentage = (position: Position) => {
@@ -428,7 +499,38 @@ const WalletDetails = ({
     if (!initialValue || position.pnl == null) {
       return null;
     }
-    return (position.pnl / initialValue) * 100;
+    // For short positions, we need to invert the PNL calculation
+    // because a negative price movement is profitable for shorts
+    const pnlPercentage = (position.pnl / initialValue) * 100;
+    return pnlPercentage;
+  };
+
+  const calculateCurrentPrice = (position: Position) => {
+    if (
+      !position.entry_price ||
+      position.pnl == null ||
+      !position.size ||
+      position.size === 0 ||
+      !position.leverage
+    ) {
+      return null;
+    }
+
+    // Calculate the initial investment (margin)
+    const initialValue =
+      Math.abs(position.size * position.entry_price) / position.leverage;
+
+    // Calculate the percentage return on the initial investment
+    const returnPercentage = position.pnl / initialValue;
+
+    // Calculate current price based on position direction
+    // For long positions: current_price = entry_price * (1 + return_percentage / leverage)
+    // For short positions: current_price = entry_price * (1 - return_percentage / leverage)
+    const currentPrice = position.is_long
+      ? position.entry_price * (1 + returnPercentage / position.leverage)
+      : position.entry_price * (1 - returnPercentage / position.leverage);
+
+    return currentPrice;
   };
 
   const getRatingColor = (rating: string) => {
@@ -524,7 +626,7 @@ const WalletDetails = ({
                       : "text-red-600"
                   }`}
                 >
-                  {loading ? "--" : formatCurrency(walletStats.totalPnL)}
+                  {loading ? "--" : formatCurrencyBasic(walletStats.totalPnL)}
                 </p>
               </div>
               <DollarSign className="h-8 w-8 text-muted-foreground" />
@@ -609,7 +711,9 @@ const WalletDetails = ({
                       : "text-red-600"
                   }`}
                 >
-                  {loading ? "--" : formatCurrency(walletStats.closedTradesPnL)}
+                  {loading
+                    ? "--"
+                    : formatCurrencyBasic(walletStats.closedTradesPnL)}
                 </p>
               </div>
               <TrendingUp className="h-8 w-8 text-muted-foreground" />
@@ -641,6 +745,83 @@ const WalletDetails = ({
           </CardContent>
         </Card>
       </div>
+
+      {/* Trading Style Analysis */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Trading Style Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Trading Style:</span>
+                <Badge variant="outline" className="text-sm">
+                  {loading ? "--" : walletStats.tradingStyle}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  Avg Position Duration:
+                </span>
+                <span className="text-sm">
+                  {loading
+                    ? "--"
+                    : `${walletStats.avgPositionDuration.toFixed(1)} days`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Risk Tolerance:</span>
+                <Badge
+                  variant={
+                    walletStats.riskTolerance === "High Risk"
+                      ? "destructive"
+                      : walletStats.riskTolerance === "Medium Risk"
+                        ? "secondary"
+                        : "default"
+                  }
+                >
+                  {loading ? "--" : walletStats.riskTolerance}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Avg Leverage:</span>
+                <span className="text-sm font-medium">
+                  {loading ? "--" : `${walletStats.avgLeverage.toFixed(1)}x`}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Day Trading:</span>
+                  <span className="font-medium">
+                    {loading ? "--" : walletStats.dayTradingPositions}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Swing Trading:</span>
+                  <span className="font-medium">
+                    {loading ? "--" : walletStats.swingTradingPositions}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Long Term:</span>
+                  <span className="font-medium">
+                    {loading ? "--" : walletStats.longTermPositions}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>High P&L Active:</span>
+                  <span className="font-medium text-green-600">
+                    {loading ? "--" : walletStats.highPnlActivePositions}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Additional Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -683,26 +864,20 @@ const WalletDetails = ({
               <div className="space-y-1">
                 <div className="flex justify-between">
                   <span className="text-sm">Avg P&L:</span>
-                  <span
-                    className={`text-sm font-medium ${
-                      walletStats.avgPnL >= 0
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {loading ? "--" : formatCurrency(walletStats.avgPnL)}
+                  <span className="text-sm font-medium">
+                    {loading ? "--" : formatCurrencyBasic(walletStats.avgPnL)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-green-600">Best Trade:</span>
                   <span className="text-sm font-medium text-green-600">
-                    {loading ? "--" : formatCurrency(walletStats.maxWin)}
+                    {loading ? "--" : formatCurrencyBasic(walletStats.maxWin)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-red-600">Worst Trade:</span>
                   <span className="text-sm font-medium text-red-600">
-                    {loading ? "--" : formatCurrency(walletStats.maxLoss)}
+                    {loading ? "--" : formatCurrencyBasic(walletStats.maxLoss)}
                   </span>
                 </div>
               </div>
@@ -840,7 +1015,30 @@ const WalletDetails = ({
                     </Button>
                   </TableHead>
                   <TableHead className="text-right">
-                    <span className="font-medium">Initial Value</span>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        const initialValueSort = (a: Position, b: Position) => {
+                          const aValue = calculateInitialValue(a) || 0;
+                          const bValue = calculateInitialValue(b) || 0;
+                          return aValue - bValue;
+                        };
+                        setSortConfig((prev) => ({
+                          field: "size", // Use size as proxy for initial value sorting
+                          order:
+                            prev.field === "size" && prev.order === "asc"
+                              ? "desc"
+                              : "asc",
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Initial Value{renderSortIcon("size")}
+                    </Button>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <span className="font-medium">Current Price</span>
                   </TableHead>
                   <TableHead className="text-center">
                     <Button
@@ -887,6 +1085,15 @@ const WalletDetails = ({
                       Created{renderSortIcon("created_at")}
                     </Button>
                   </TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("updated_at")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Updated{renderSortIcon("updated_at")}
+                    </Button>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -908,6 +1115,9 @@ const WalletDetails = ({
                           <Skeleton className="h-6 w-24 ml-auto" />
                         </TableCell>
                         <TableCell className="text-right">
+                          <Skeleton className="h-6 w-24 ml-auto" />
+                        </TableCell>
+                        <TableCell className="text-right">
                           <Skeleton className="h-6 w-16 ml-auto" />
                         </TableCell>
                         <TableCell className="text-right">
@@ -924,6 +1134,9 @@ const WalletDetails = ({
                         </TableCell>
                         <TableCell className="text-center">
                           <Skeleton className="h-6 w-16 mx-auto" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-6 w-20" />
                         </TableCell>
                         <TableCell>
                           <Skeleton className="h-6 w-20" />
@@ -955,6 +1168,11 @@ const WalletDetails = ({
                       <TableCell className="text-right">
                         {calculateInitialValue(position) != null
                           ? formatCurrency(calculateInitialValue(position)!)
+                          : "N/A"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {calculateCurrentPrice(position) != null
+                          ? formatCurrency(calculateCurrentPrice(position)!)
                           : "N/A"}
                       </TableCell>
                       <TableCell className="text-center">
@@ -1005,14 +1223,39 @@ const WalletDetails = ({
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {position.created_at
-                          ? new Date(position.created_at).toLocaleDateString()
+                          ? new Date(position.created_at).toLocaleString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                              },
+                            )
+                          : "N/A"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {position.updated_at
+                          ? new Date(position.updated_at).toLocaleString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                              },
+                            )
                           : "N/A"}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8">
+                    <TableCell colSpan={13} className="text-center py-8">
                       {activeTab === "current"
                         ? "No active positions found"
                         : "No closed positions found"}

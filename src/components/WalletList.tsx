@@ -69,6 +69,9 @@ interface WalletData {
   maxDrawdown: number;
   closedTrades: number;
   closedTradePnL: number;
+  avgLeverage: number;
+  avgInitialAmount: number;
+  closedPositionWinRatio: number;
 }
 
 interface ApiResponse {
@@ -249,6 +252,9 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
         maxDrawdown: 0,
         closedTrades: 0,
         closedTradePnL: 0,
+        avgLeverage: 0,
+        avgInitialAmount: 0,
+        closedPositionWinRatio: 0,
       };
 
       existing.totalTrades += 1;
@@ -286,6 +292,43 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
           : 0;
       wallet.avgPnL =
         wallet.totalTrades > 0 ? wallet.totalPnL / wallet.totalTrades : 0;
+
+      // Calculate average leverage
+      const leverageSum = allPositions
+        .filter((p) => p.address === wallet.address && p.leverage)
+        .reduce((sum, p) => sum + (p.leverage || 0), 0);
+      const leverageCount = allPositions.filter(
+        (p) => p.address === wallet.address && p.leverage,
+      ).length;
+      wallet.avgLeverage = leverageCount > 0 ? leverageSum / leverageCount : 0;
+
+      // Calculate average initial amount
+      const initialAmounts = allPositions
+        .filter(
+          (p) =>
+            p.address === wallet.address &&
+            p.size &&
+            p.entry_price &&
+            p.leverage,
+        )
+        .map((p) => (Math.abs(p.size!) * p.entry_price!) / p.leverage!);
+      wallet.avgInitialAmount =
+        initialAmounts.length > 0
+          ? initialAmounts.reduce((sum, amount) => sum + amount, 0) /
+            initialAmounts.length
+          : 0;
+
+      // Calculate closed position win ratio
+      const closedPositions = allPositions.filter(
+        (p) => p.address === wallet.address && p.status !== "active",
+      );
+      const closedWinningPositions = closedPositions.filter(
+        (p) => (p.pnl || 0) > 0,
+      );
+      wallet.closedPositionWinRatio =
+        closedPositions.length > 0
+          ? (closedWinningPositions.length / closedPositions.length) * 100
+          : 0;
 
       // Calculate rating based on win rate and total PnL
       if (wallet.winRate >= 80 && wallet.totalPnL > 10000) {
@@ -804,13 +847,22 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
                     Active Positions{renderSortIcon("activePositions")}
                   </Button>
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-right">
                   <Button
                     variant="ghost"
-                    onClick={() => handleSort("lastTrade")}
+                    onClick={() => handleSort("avgLeverage")}
                     className="h-auto p-0 font-medium"
                   >
-                    Last Trade{renderSortIcon("lastTrade")}
+                    Avg Leverage{renderSortIcon("avgLeverage")}
+                  </Button>
+                </TableHead>
+                <TableHead className="text-right">
+                  <Button
+                    variant="ghost"
+                    onClick={() => handleSort("avgInitialAmount")}
+                    className="h-auto p-0 font-medium"
+                  >
+                    Avg Initial Amount{renderSortIcon("avgInitialAmount")}
                   </Button>
                 </TableHead>
                 <TableHead className="text-right">
@@ -834,10 +886,10 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
                 <TableHead className="text-right">
                   <Button
                     variant="ghost"
-                    onClick={() => handleSort("riskScore")}
+                    onClick={() => handleSort("closedPositionWinRatio")}
                     className="h-auto p-0 font-medium"
                   >
-                    Risk Score{renderSortIcon("riskScore")}
+                    Closed Win Ratio{renderSortIcon("closedPositionWinRatio")}
                   </Button>
                 </TableHead>
                 <TableHead className="text-center">Actions</TableHead>
@@ -859,19 +911,19 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
                         <Skeleton className="h-6 w-16 ml-auto" />
                       </TableCell>
                       <TableCell className="text-right">
-                        <Skeleton className="h-6 w-24 ml-auto" />
-                      </TableCell>
-                      <TableCell className="text-right">
                         <Skeleton className="h-6 w-16 ml-auto" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-20" />
                       </TableCell>
                       <TableCell className="text-right">
                         <Skeleton className="h-6 w-16 ml-auto" />
                       </TableCell>
                       <TableCell className="text-right">
-                        <Skeleton className="h-6 w-24 ml-auto" />
+                        <Skeleton className="h-6 w-16 ml-auto" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Skeleton className="h-6 w-16 ml-auto" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Skeleton className="h-6 w-16 ml-auto" />
                       </TableCell>
                       <TableCell className="text-right">
                         <Skeleton className="h-6 w-16 ml-auto" />
@@ -919,9 +971,14 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
                     <TableCell className="text-right">
                       {wallet.activePositions}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {wallet.lastTrade
-                        ? new Date(wallet.lastTrade).toLocaleDateString()
+                    <TableCell className="text-right">
+                      {wallet.avgLeverage > 0
+                        ? `${wallet.avgLeverage.toFixed(1)}x`
+                        : "N/A"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {wallet.avgInitialAmount > 0
+                        ? formatCurrency(wallet.avgInitialAmount)
                         : "N/A"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -939,8 +996,16 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className={getRiskColor(wallet.riskScore)}>
-                        {wallet.riskScore.toFixed(0)}
+                      <span
+                        className={
+                          wallet.closedPositionWinRatio >= 60
+                            ? "text-green-600"
+                            : wallet.closedPositionWinRatio >= 40
+                              ? "text-yellow-600"
+                              : "text-red-600"
+                        }
+                      >
+                        {wallet.closedPositionWinRatio.toFixed(1)}%
                       </span>
                     </TableCell>
                     <TableCell className="text-center">
@@ -958,7 +1023,7 @@ const WalletList = ({ onWalletSelect = () => {}, onBack }: WalletListProps) => {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8">
+                  <TableCell colSpan={11} className="text-center py-8">
                     {filteredAndSortedWallets.length === 0
                       ? filters.search ||
                         filters.rating !== "all" ||

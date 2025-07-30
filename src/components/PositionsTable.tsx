@@ -1214,14 +1214,34 @@ const PositionsTable = () => {
                     {columnVisibility.created_at && (
                       <TableCell className="text-sm text-muted-foreground">
                         {position.created_at
-                          ? new Date(position.created_at).toLocaleDateString()
+                          ? new Date(position.created_at).toLocaleString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                              },
+                            )
                           : "N/A"}
                       </TableCell>
                     )}
                     {columnVisibility.updated_at && (
                       <TableCell className="text-sm text-muted-foreground">
                         {position.updated_at
-                          ? new Date(position.updated_at).toLocaleDateString()
+                          ? new Date(position.updated_at).toLocaleString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                              },
+                            )
                           : "N/A"}
                       </TableCell>
                     )}
