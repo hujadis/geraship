@@ -2828,220 +2828,702 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                Top Assets by Activity
+                All Assets Analysis
               </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Comprehensive view of all {analytics.assetAnalysis.length}{" "}
+                assets with position data, current prices, and performance
+                metrics
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                 {loading
-                  ? Array(5)
+                  ? Array(6)
                       .fill(0)
                       .map((_, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between p-4 border rounded-lg"
-                        >
-                          <div className="space-y-2">
-                            <Skeleton className="h-4 w-20" />
-                            <Skeleton className="h-3 w-32" />
+                        <div key={i} className="p-4 border rounded-lg bg-card">
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-start">
+                              <Skeleton className="h-6 w-16" />
+                              <Skeleton className="h-4 w-12" />
+                            </div>
+                            <div className="space-y-2">
+                              <Skeleton className="h-4 w-full" />
+                              <Skeleton className="h-4 w-3/4" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Skeleton className="h-8 w-full" />
+                              <Skeleton className="h-8 w-full" />
+                            </div>
                           </div>
-                          <Skeleton className="h-6 w-16" />
                         </div>
                       ))
-                  : analytics.assetAnalysis.slice(0, 10).map((asset, index) => (
-                      <div
-                        key={asset.asset}
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{asset.asset}</span>
-                            <Badge
-                              className={
-                                asset.sentiment === "bullish"
-                                  ? "bg-green-500 text-white"
-                                  : "bg-red-500 text-white"
-                              }
-                            >
-                              {asset.sentiment}
-                            </Badge>
+                  : analytics.assetAnalysis.map((asset, index) => {
+                      const currentPrice =
+                        asset.currentPrice || asset.avgEntryPrice;
+                      const priceChange = asset.priceChange || 0;
+                      const totalVolume = asset.positions.reduce(
+                        (sum, p) => sum + Math.abs(p.size || 0),
+                        0,
+                      );
+                      const avgLeverage = asset.positions
+                        .filter((p) => p.leverage && p.leverage > 0)
+                        .reduce(
+                          (sum, p, _, arr) =>
+                            sum + (p.leverage || 0) / arr.length,
+                          0,
+                        );
+
+                      return (
+                        <div
+                          key={asset.asset}
+                          className="p-4 border rounded-lg bg-card hover:shadow-md transition-all duration-200"
+                        >
+                          {/* Header with Asset Name and Current Price */}
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h3 className="text-lg font-bold text-primary">
+                                {asset.asset}
+                              </h3>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge
+                                  variant={
+                                    asset.sentiment === "bullish"
+                                      ? "default"
+                                      : "destructive"
+                                  }
+                                  className="text-xs"
+                                >
+                                  {asset.sentiment.toUpperCase()}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  #{index + 1}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold">
+                                {formatCurrency(currentPrice)}
+                              </div>
+                              <div
+                                className={`text-sm font-medium ${
+                                  priceChange >= 0
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {priceChange >= 0 ? "+" : ""}
+                                {priceChange.toFixed(1)}%
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Current Price
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">
-                            Avg Entry: {formatCurrency(asset.avgEntryPrice)} |
-                            Long: {asset.longCount} | Short: {asset.shortCount}
+
+                          {/* Position Summary */}
+                          <div className="mb-3">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-medium text-muted-foreground">
+                                Position Summary
+                              </span>
+                              <span className="text-sm font-bold">
+                                {asset.totalPositions} total
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-green-50 dark:bg-green-900/20 p-2 rounded border border-green-200 dark:border-green-800">
+                                <div className="text-xs text-green-700 dark:text-green-400 font-medium">
+                                  Long Positions
+                                </div>
+                                <div className="text-lg font-bold text-green-600">
+                                  {asset.longCount}
+                                </div>
+                                <div className="text-xs text-green-600/80">
+                                  {(
+                                    (asset.longCount / asset.totalPositions) *
+                                    100
+                                  ).toFixed(0)}
+                                  %
+                                </div>
+                              </div>
+                              <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
+                                <div className="text-xs text-red-700 dark:text-red-400 font-medium">
+                                  Short Positions
+                                </div>
+                                <div className="text-lg font-bold text-red-600">
+                                  {asset.shortCount}
+                                </div>
+                                <div className="text-xs text-red-600/80">
+                                  {(
+                                    (asset.shortCount / asset.totalPositions) *
+                                    100
+                                  ).toFixed(0)}
+                                  %
+                                </div>
+                              </div>
+                            </div>
                           </div>
+
+                          {/* Key Metrics Grid */}
+                          <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                            <div className="bg-muted/30 p-2 rounded">
+                              <div className="text-xs text-muted-foreground">
+                                Avg Entry
+                              </div>
+                              <div className="font-medium">
+                                {formatCurrency(asset.avgEntryPrice)}
+                              </div>
+                            </div>
+                            <div className="bg-muted/30 p-2 rounded">
+                              <div className="text-xs text-muted-foreground">
+                                Total P&L
+                              </div>
+                              <div
+                                className={`font-medium ${getPerformanceColor(asset.totalPnL)}`}
+                              >
+                                {formatCurrency(asset.totalPnL)}
+                              </div>
+                            </div>
+                            <div className="bg-muted/30 p-2 rounded">
+                              <div className="text-xs text-muted-foreground">
+                                Win Rate
+                              </div>
+                              <div
+                                className={`font-medium ${
+                                  asset.winRate >= 60
+                                    ? "text-green-600"
+                                    : asset.winRate >= 40
+                                      ? "text-yellow-600"
+                                      : "text-red-600"
+                                }`}
+                              >
+                                {asset.winRate.toFixed(1)}%
+                              </div>
+                            </div>
+                            <div className="bg-muted/30 p-2 rounded">
+                              <div className="text-xs text-muted-foreground">
+                                Avg Leverage
+                              </div>
+                              <div className="font-medium">
+                                {avgLeverage > 0
+                                  ? `${avgLeverage.toFixed(1)}x`
+                                  : "N/A"}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Volume and Performance */}
+                          <div className="space-y-2 mb-3">
+                            <div className="bg-muted/30 p-2 rounded">
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Total Volume
+                              </div>
+                              <div className="font-medium">
+                                {totalVolume > 1000000
+                                  ? `${(totalVolume / 1000000).toFixed(1)}M`
+                                  : totalVolume > 1000
+                                    ? `${(totalVolume / 1000).toFixed(0)}K`
+                                    : `${totalVolume.toFixed(0)}`}
+                              </div>
+                            </div>
+                            <div className="bg-muted/30 p-2 rounded">
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Sharpe Ratio
+                              </div>
+                              <div
+                                className={`font-medium ${
+                                  asset.sharpeRatio > 1
+                                    ? "text-green-600"
+                                    : asset.sharpeRatio > 0
+                                      ? "text-yellow-600"
+                                      : "text-red-600"
+                                }`}
+                              >
+                                {asset.sharpeRatio.toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Performance Indicators */}
+                          <div className="pt-2 border-t">
+                            <div className="flex justify-between items-center text-xs">
+                              <div className="flex items-center gap-1">
+                                <div
+                                  className={`w-2 h-2 rounded-full ${
+                                    asset.momentum > 0
+                                      ? "bg-green-500"
+                                      : "bg-red-500"
+                                  }`}
+                                ></div>
+                                <span className="text-muted-foreground">
+                                  Momentum:{" "}
+                                  {asset.momentum > 0 ? "Positive" : "Negative"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <div
+                                  className={`w-2 h-2 rounded-full ${
+                                    asset.maxDrawdown < 20
+                                      ? "bg-green-500"
+                                      : asset.maxDrawdown < 40
+                                        ? "bg-yellow-500"
+                                        : "bg-red-500"
+                                  }`}
+                                ></div>
+                                <span className="text-muted-foreground">
+                                  Risk:{" "}
+                                  {asset.maxDrawdown < 20
+                                    ? "Low"
+                                    : asset.maxDrawdown < 40
+                                      ? "Med"
+                                      : "High"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Trading Insight for assets with significant activity */}
+                          {asset.totalPositions >= 5 && (
+                            <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                              <div className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">
+                                💡 Trading Insight
+                              </div>
+                              <div className="text-xs text-blue-600 dark:text-blue-300">
+                                {asset.longCount > asset.shortCount * 2
+                                  ? `Strong bullish bias - ${asset.longCount} longs vs ${asset.shortCount} shorts`
+                                  : asset.shortCount > asset.longCount * 2
+                                    ? `Strong bearish bias - ${asset.shortCount} shorts vs ${asset.longCount} longs`
+                                    : asset.winRate > 70
+                                      ? `Excellent ${asset.winRate.toFixed(0)}% win rate - strong performer`
+                                      : asset.totalPnL > 10000
+                                        ? `High profit asset - ${formatCurrency(asset.totalPnL)} total P&L`
+                                        : "Balanced positioning with mixed sentiment"}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-right">
-                          <div className="font-medium">
-                            {asset.totalPositions} positions
-                          </div>
-                          <div
-                            className={`text-sm ${asset.totalPnL >= 0 ? "text-green-600" : "text-red-600"}`}
-                          >
-                            {formatCurrency(asset.totalPnL)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
               </div>
+
+              {/* Summary Stats */}
+              {!loading && analytics.assetAnalysis.length > 0 && (
+                <div className="mt-6 p-4 bg-muted/30 rounded-lg">
+                  <h4 className="font-medium mb-3">Portfolio Summary</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-primary">
+                        {analytics.assetAnalysis.length}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Total Assets
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {
+                          analytics.assetAnalysis.filter((a) => a.totalPnL > 0)
+                            .length
+                        }
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Profitable Assets
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {analytics.assetAnalysis.reduce(
+                          (sum, a) => sum + a.totalPositions,
+                          0,
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Total Positions
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-primary">
+                        {formatCurrency(
+                          analytics.assetAnalysis.reduce(
+                            (sum, a) => sum + a.totalPnL,
+                            0,
+                          ),
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Combined P&L
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="patterns" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Pattern Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  Unusual Patterns
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {analytics.patterns.unusual.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No unusual patterns detected
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Unusual Patterns
                     </p>
-                  ) : (
-                    analytics.patterns.unusual.map((pattern, index) => (
-                      <Alert key={index}>
+                    <p className="text-2xl font-bold text-red-600">
+                      {analytics.patterns.unusual.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      High significance
+                    </p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-red-500" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Common Patterns
+                    </p>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {analytics.patterns.usual.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Normal behavior
+                    </p>
+                  </div>
+                  <Eye className="h-8 w-8 text-blue-500" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Seasonal Trends
+                    </p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {analytics.patterns.seasonality.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Monthly data
+                    </p>
+                  </div>
+                  <Calendar className="h-8 w-8 text-green-500" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Unusual Patterns - Detailed */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+                Unusual Trading Patterns Detected
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Anomalous trading behaviors that deviate from normal market
+                patterns - detailed analysis with specific coins and reasons
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {analytics.patterns.unusual.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                    <p className="text-lg font-medium text-green-600">
+                      No Unusual Patterns Detected
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      All trading patterns appear to be within normal parameters
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {analytics.patterns.unusual.map((pattern, index) => (
+                      <Alert
+                        key={index}
+                        className="border-l-4 border-l-red-500"
+                      >
                         <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle className="flex items-center gap-2">
-                          {pattern.type}
-                          <Badge
-                            variant={
-                              pattern.significance === "high"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                            className="text-xs"
-                          >
-                            {pattern.significance}
-                          </Badge>
-                        </AlertTitle>
-                        <AlertDescription className="space-y-2">
-                          <div>{pattern.description}</div>
-                          <div className="text-xs text-muted-foreground italic">
-                            Impact: {pattern.impact}
+                        <AlertTitle className="flex items-center justify-between">
+                          <span className="text-lg font-bold">
+                            {pattern.type}
+                          </span>
+                          <div className="flex gap-2">
+                            <Badge
+                              variant={
+                                pattern.significance === "high"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-xs"
+                            >
+                              {pattern.significance.toUpperCase()} RISK
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {pattern.count} positions
+                            </Badge>
                           </div>
+                        </AlertTitle>
+                        <AlertDescription className="space-y-4">
+                          <div className="text-sm font-medium">
+                            {pattern.description}
+                          </div>
+
+                          <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
+                            <div className="text-sm font-medium text-red-700 dark:text-red-400 mb-2">
+                              ⚠️ Why This is Unusual:
+                            </div>
+                            <div className="text-sm text-red-600 dark:text-red-300">
+                              {pattern.impact}
+                            </div>
+                          </div>
+
                           {pattern.details && (
-                            <div className="mt-3 p-2 bg-muted rounded text-xs space-y-1">
+                            <div className="space-y-3">
                               {pattern.details.assets && (
-                                <div>
-                                  <strong>Assets:</strong>{" "}
-                                  {pattern.details.assets.join(", ")}
+                                <div className="p-3 bg-muted rounded-lg">
+                                  <div className="text-sm font-medium text-primary mb-2">
+                                    🪙 Affected Cryptocurrencies:
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {pattern.details.assets.map((asset, i) => (
+                                      <Badge
+                                        key={i}
+                                        variant="outline"
+                                        className="text-sm font-medium"
+                                      >
+                                        {asset}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                  {pattern.details.avgLeverage && (
+                                    <div className="mt-2 text-sm text-muted-foreground">
+                                      Average Leverage:{" "}
+                                      <span className="font-bold text-orange-600">
+                                        {pattern.details.avgLeverage.toFixed(1)}
+                                        x
+                                      </span>
+                                    </div>
+                                  )}
+                                  {pattern.details.totalValue && (
+                                    <div className="text-sm text-muted-foreground">
+                                      Total Value:{" "}
+                                      <span className="font-bold text-blue-600">
+                                        $
+                                        {(
+                                          pattern.details.totalValue / 1000000
+                                        ).toFixed(1)}
+                                        M
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               )}
+
                               {pattern.details.positions && (
-                                <div className="space-y-1">
-                                  <strong>Sample Positions:</strong>
-                                  {pattern.details.positions.map((pos, i) => (
-                                    <div key={i} className="ml-2">
-                                      • {pos.asset}: {pos.direction}{" "}
-                                      {pos.leverage && `${pos.leverage}x`}{" "}
-                                      {pos.size &&
-                                        `${(pos.size / 1000).toFixed(0)}K`}{" "}
-                                      {pos.pnl && `PnL: ${pos.pnl.toFixed(0)}`}{" "}
-                                      {pos.daysAgo && `(${pos.daysAgo}d ago)`}
-                                    </div>
-                                  ))}
+                                <div className="p-3 bg-muted rounded-lg">
+                                  <div className="text-sm font-medium text-primary mb-3">
+                                    📊 Sample Positions (showing why this is
+                                    unusual):
+                                  </div>
+                                  <div className="space-y-2">
+                                    {pattern.details.positions.map((pos, i) => (
+                                      <div
+                                        key={i}
+                                        className="flex items-center justify-between p-3 bg-background rounded border"
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <Badge
+                                            variant="outline"
+                                            className="text-sm font-medium"
+                                          >
+                                            {pos.asset}
+                                          </Badge>
+                                          <span
+                                            className={`text-sm font-medium px-2 py-1 rounded ${
+                                              pos.direction === "Long"
+                                                ? "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                                                : "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400"
+                                            }`}
+                                          >
+                                            {pos.direction}
+                                          </span>
+                                          {pos.leverage && (
+                                            <span className="text-sm text-orange-600 font-bold">
+                                              {pos.leverage}x leverage
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-right">
+                                          {pos.size && (
+                                            <div className="text-sm font-bold text-blue-600">
+                                              ${(pos.size / 1000).toFixed(0)}K
+                                              size
+                                            </div>
+                                          )}
+                                          {pos.pnl && (
+                                            <div
+                                              className={`text-sm font-bold ${
+                                                pos.pnl >= 0
+                                                  ? "text-green-600"
+                                                  : "text-red-600"
+                                              }`}
+                                            >
+                                              {formatCurrency(pos.pnl)} P&L
+                                            </div>
+                                          )}
+                                          {pos.daysAgo && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {pos.daysAgo} days ago
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </div>
                           )}
                         </AlertDescription>
                       </Alert>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Eye className="h-5 w-5" />
-                  Common Patterns
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {analytics.patterns.usual.map((pattern, index) => (
-                    <div key={index} className="p-3 border rounded-lg">
-                      <div className="font-medium text-sm">{pattern.type}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {pattern.description}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Entry Price Analysis */}
+          {/* Common Patterns */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <LineChart className="h-5 w-5" />
-                Entry Price Analysis
+                <Eye className="h-5 w-5 text-blue-500" />
+                Common Trading Patterns
               </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Standard trading behaviors that align with typical market
+                patterns
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-medium mb-3">
-                    Early Entries (Low Price, Old Positions)
-                  </h4>
-                  <div className="space-y-2">
-                    {analytics.entryPriceAnalysis.earlyEntries
-                      .slice(0, 5)
-                      .map((position, index) => (
-                        <div
-                          key={position.id}
-                          className="flex justify-between items-center p-2 bg-muted rounded"
-                        >
-                          <span className="text-sm">{position.asset}</span>
-                          <div className="text-right">
-                            <div className="text-sm font-medium">
-                              {formatCurrency(position.entry_price || 0)}
-                            </div>
-                            <div
-                              className={`text-xs ${(position.pnl || 0) >= 0 ? "text-green-600" : "text-red-600"}`}
-                            >
-                              {formatCurrency(position.pnl || 0)}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {analytics.patterns.usual.map((pattern, index) => (
+                  <div
+                    key={index}
+                    className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-medium text-sm text-blue-900 dark:text-blue-100">
+                        {pattern.type}
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {pattern.count} positions
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-blue-700 dark:text-blue-300 mb-2">
+                      {pattern.description}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          pattern.significance === "high"
+                            ? "bg-red-500"
+                            : pattern.significance === "medium"
+                              ? "bg-yellow-500"
+                              : "bg-green-500"
+                        }`}
+                      ></div>
+                      <span className="text-xs text-muted-foreground">
+                        Impact: {pattern.impact}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-3">Recent Entries</h4>
-                  <div className="space-y-2">
-                    {analytics.entryPriceAnalysis.recentEntries
-                      .slice(0, 5)
-                      .map((position, index) => (
-                        <div
-                          key={position.id}
-                          className="flex justify-between items-center p-2 bg-muted rounded"
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Seasonal Patterns */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-green-500" />
+                Seasonal Trading Patterns
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Monthly performance trends and seasonal trading behaviors
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {analytics.patterns.seasonality.map((season, index) => (
+                  <div key={index} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="font-medium text-sm">{season.period}</div>
+                      <Badge
+                        variant={
+                          season.performance === "Positive"
+                            ? "default"
+                            : "destructive"
+                        }
+                        className="text-xs"
+                      >
+                        {season.performance}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">
+                          Avg P&L:
+                        </span>
+                        <span
+                          className={`text-sm font-bold ${
+                            season.avgPnL >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
                         >
-                          <span className="text-sm">{position.asset}</span>
-                          <div className="text-right">
-                            <div className="text-sm font-medium">
-                              {formatCurrency(position.entry_price || 0)}
-                            </div>
-                            <div
-                              className={`text-xs ${(position.pnl || 0) >= 0 ? "text-green-600" : "text-red-600"}`}
-                            >
-                              {formatCurrency(position.pnl || 0)}
-                            </div>
-                          </div>
+                          {formatCurrency(season.avgPnL)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">
+                          Trades:
+                        </span>
+                        <span className="text-sm font-medium">
+                          {season.totalTrades}
+                        </span>
+                      </div>
+                      <div className="mt-2">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs text-muted-foreground">
+                            Success Rate:
+                          </span>
+                          <span className="text-xs font-medium">
+                            {((season.avgPnL > 0 ? 1 : 0) * 100).toFixed(0)}%
+                          </span>
                         </div>
-                      ))}
+                        <Progress
+                          value={(season.avgPnL > 0 ? 1 : 0) * 100}
+                          className="h-1"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
             </CardContent>
           </Card>
