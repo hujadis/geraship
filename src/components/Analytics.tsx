@@ -95,7 +95,7 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 8,
     }).format(value);
   };
 
@@ -209,6 +209,33 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
     fetchAllPositions();
   }, []);
 
+  // Calculate current price for each asset (average from position table)
+  const calculateCurrentPrice = (position: Position) => {
+    if (
+      !position.entry_price ||
+      position.pnl == null ||
+      !position.size ||
+      position.size === 0 ||
+      !position.leverage
+    ) {
+      return null;
+    }
+
+    // Calculate the initial investment (margin)
+    const initialValue =
+      Math.abs(position.size * position.entry_price) / position.leverage;
+
+    // Calculate the percentage return on the initial investment
+    const returnPercentage = position.pnl / initialValue;
+
+    // Calculate current price based on position direction
+    const currentPrice = position.is_long
+      ? position.entry_price * (1 + returnPercentage / position.leverage)
+      : position.entry_price * (1 - returnPercentage / position.leverage);
+
+    return currentPrice;
+  };
+
   // Calculate comprehensive analytics
   const analytics = useMemo(() => {
     if (allPositions.length === 0) {
@@ -233,6 +260,7 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
           shortSuggestions: [],
           arbitrage: [],
           momentum: [],
+          aiRecommendations: [],
         },
         professionalTraderAnalysis: [],
         riskMetrics: {
@@ -386,6 +414,26 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
           leverages.length > 0
             ? leverages.reduce((sum: number, l: number) => sum + l, 0) /
               leverages.length
+            : 0;
+
+        // Calculate current price (average from all positions)
+        const currentPrices = asset.positions
+          .map((p: Position) => calculateCurrentPrice(p))
+          .filter((price: number | null) => price !== null) as number[];
+        asset.currentPrice =
+          currentPrices.length > 0
+            ? currentPrices.reduce(
+                (sum: number, price: number) => sum + price,
+                0,
+              ) / currentPrices.length
+            : asset.avgEntryPrice;
+
+        // Calculate price change percentage
+        asset.priceChange =
+          asset.avgEntryPrice > 0
+            ? ((asset.currentPrice - asset.avgEntryPrice) /
+                asset.avgEntryPrice) *
+              100
             : 0;
 
         // Calculate volatility
@@ -871,6 +919,7 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
     const shortSuggestions = [];
     const arbitrage = [];
     const momentum = [];
+    const aiRecommendations = [];
 
     // Professional Trader Analysis - Smart Money Tracking
     const professionalTraderAnalysis = [];
@@ -944,6 +993,224 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
                     ? "bearish"
                     : "neutral",
         });
+
+        // Position Data-Based AI Recommendation System
+        const generateAIRecommendation = () => {
+          const signals = [];
+          let recommendation = "HOLD";
+          let confidence = 0;
+          let reasoning = [];
+
+          // Position Performance Analysis
+          if (winRate > 65) {
+            signals.push({
+              type: "bullish",
+              strength: 0.8,
+              reason: "High win rate from position data",
+            });
+            reasoning.push(`📊 ${winRate.toFixed(0)}% win rate from positions`);
+          } else if (winRate < 35) {
+            signals.push({
+              type: "bearish",
+              strength: 0.8,
+              reason: "Low win rate from position data",
+            });
+            reasoning.push(`📊 ${winRate.toFixed(0)}% win rate from positions`);
+          }
+
+          // Position P&L Analysis
+          if (avgSmartPnL > 2000) {
+            signals.push({
+              type: "bullish",
+              strength: 0.9,
+              reason: "Strong positive P&L from positions",
+            });
+            reasoning.push(`💰 Avg P&L: ${formatCurrency(avgSmartPnL)}`);
+          } else if (avgSmartPnL < -2000) {
+            signals.push({
+              type: "bearish",
+              strength: 0.9,
+              reason: "Negative P&L from positions",
+            });
+            reasoning.push(`💸 Avg P&L: ${formatCurrency(avgSmartPnL)}`);
+          }
+
+          // Position Direction Analysis
+          if (longPercentage > 70) {
+            signals.push({
+              type: "bullish",
+              strength: 0.7,
+              reason: "Majority of positions are long",
+            });
+            reasoning.push(
+              `📈 ${longPercentage.toFixed(0)}% positions are long`,
+            );
+          } else if (shortPercentage > 70) {
+            signals.push({
+              type: "bearish",
+              strength: 0.7,
+              reason: "Majority of positions are short",
+            });
+            reasoning.push(
+              `📉 ${shortPercentage.toFixed(0)}% positions are short`,
+            );
+          }
+
+          // Position Size Analysis
+          const totalVolume = asset.positions.reduce(
+            (sum, p) => sum + Math.abs(p.size || 0),
+            0,
+          );
+          if (totalVolume > 5000000) {
+            signals.push({
+              type: "bullish",
+              strength: 0.6,
+              reason: "High position volume indicates confidence",
+            });
+            reasoning.push(
+              `💪 ${(totalVolume / 1000000).toFixed(1)}M total volume`,
+            );
+          }
+
+          // Position Leverage Analysis
+          if (asset.avgLeverage > 25) {
+            signals.push({
+              type: "bearish",
+              strength: 0.5,
+              reason: "High leverage increases risk",
+            });
+            reasoning.push(`⚡ Avg leverage: ${asset.avgLeverage.toFixed(1)}x`);
+          } else if (asset.avgLeverage > 0 && asset.avgLeverage < 10) {
+            signals.push({
+              type: "bullish",
+              strength: 0.3,
+              reason: "Conservative leverage usage",
+            });
+            reasoning.push(
+              `🛡️ Conservative ${asset.avgLeverage.toFixed(1)}x leverage`,
+            );
+          }
+
+          // Position Entry Price Analysis
+          if (asset.avgEntryPrice < 100 && avgSmartPnL > 0) {
+            signals.push({
+              type: "bullish",
+              strength: 0.6,
+              reason: "Low entry price with positive returns",
+            });
+            reasoning.push(
+              `🎯 Low entry at ${formatCurrency(asset.avgEntryPrice)}`,
+            );
+          }
+
+          // Position Count Analysis
+          if (asset.totalPositions >= 10) {
+            signals.push({
+              type: "bullish",
+              strength: 0.4,
+              reason: "High number of positions shows interest",
+            });
+            reasoning.push(`📊 ${asset.totalPositions} total positions`);
+          }
+
+          // Calculate overall recommendation based on position data
+          const bullishSignals = signals.filter((s) => s.type === "bullish");
+          const bearishSignals = signals.filter((s) => s.type === "bearish");
+
+          const bullishScore = bullishSignals.reduce(
+            (sum, s) => sum + s.strength,
+            0,
+          );
+          const bearishScore = bearishSignals.reduce(
+            (sum, s) => sum + s.strength,
+            0,
+          );
+
+          if (bullishScore > bearishScore + 0.3) {
+            recommendation = "LONG";
+            confidence = Math.min(
+              ((bullishScore - bearishScore) / 2.5) * 100,
+              95,
+            );
+          } else if (bearishScore > bullishScore + 0.3) {
+            recommendation = "SHORT";
+            confidence = Math.min(
+              ((bearishScore - bullishScore) / 2.5) * 100,
+              95,
+            );
+          } else {
+            recommendation = "HOLD";
+            confidence = 40;
+            reasoning.push("⚖️ Position data shows mixed signals");
+          }
+
+          // Calculate initial investment (total margin used)
+          const initialInvestment = asset.positions.reduce((sum, p) => {
+            if (!p.size || !p.entry_price || !p.leverage || p.leverage === 0)
+              return sum;
+            const margin = Math.abs(p.size * p.entry_price) / p.leverage;
+            return sum + margin;
+          }, 0);
+
+          // Calculate long/short breakdown
+          const longPositions = asset.positions.filter(
+            (p) => p.is_long === true,
+          );
+          const shortPositions = asset.positions.filter(
+            (p) => p.is_long === false,
+          );
+          const longPnL = longPositions.reduce(
+            (sum, p) => sum + (p.pnl || 0),
+            0,
+          );
+          const shortPnL = shortPositions.reduce(
+            (sum, p) => sum + (p.pnl || 0),
+            0,
+          );
+          const longShortRatio =
+            shortPositions.length > 0
+              ? `${longPositions.length}:${shortPositions.length}`
+              : `${longPositions.length}:0`;
+
+          return {
+            asset: asset.asset,
+            recommendation,
+            confidence: Math.round(confidence),
+            reasoning: reasoning.slice(0, 4), // Top 4 reasons
+            currentPrice: asset.currentPrice,
+            priceChange: asset.priceChange,
+            entryPrice: asset.avgEntryPrice,
+            totalPositions: asset.totalPositions,
+            winRate,
+            avgPnL: avgSmartPnL,
+            riskLevel:
+              asset.maxDrawdown < 20
+                ? "Low"
+                : asset.maxDrawdown < 40
+                  ? "Medium"
+                  : "High",
+            momentum: asset.momentum,
+            volume: totalVolume,
+            leverage: asset.avgLeverage,
+            initialInvestment,
+            longShortRatio,
+            longCount: longPositions.length,
+            shortCount: shortPositions.length,
+            longPnL,
+            shortPnL,
+            signals: {
+              bullish: bullishSignals.length,
+              bearish: bearishSignals.length,
+              bullishScore: bullishScore.toFixed(1),
+              bearishScore: bearishScore.toFixed(1),
+            },
+          };
+        };
+
+        // Generate AI recommendations for all assets with at least 1 position
+        if (asset.totalPositions >= 1) {
+          aiRecommendations.push(generateAIRecommendation());
+        }
 
         // Generate Long Suggestions based on Smart Money
         if (longPercentage > 60 && avgSmartPnL > -1000 && winRate > 45) {
@@ -1531,6 +1798,9 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
         shortSuggestions,
         arbitrage,
         momentum,
+        aiRecommendations: aiRecommendations.sort(
+          (a, b) => b.confidence - a.confidence,
+        ),
       },
       professionalTraderAnalysis,
       riskMetrics: {
@@ -1806,209 +2076,748 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
 
       {/* Enhanced Tabs for Different Analytics */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="patterns">Patterns</TabsTrigger>
           <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
-          <TabsTrigger value="risk">Risk Analysis</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          {/* Market Sentiment */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PieChart className="h-5 w-5" />
-                Market Sentiment Analysis
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Bullish Positions</span>
-                  <span className="text-sm text-green-600">
-                    {analytics.marketSentiment.bullish.toFixed(1)}%
-                  </span>
-                </div>
-                <Progress
-                  value={analytics.marketSentiment.bullish}
-                  className="h-2"
-                />
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Bearish Positions</span>
-                  <span className="text-sm text-red-600">
-                    {analytics.marketSentiment.bearish.toFixed(1)}%
-                  </span>
-                </div>
-                <Progress
-                  value={analytics.marketSentiment.bearish}
-                  className="h-2"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Time Analysis */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Enhanced Market Overview Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Market Sentiment Card */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Activity Timeline
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <PieChart className="h-4 w-4" />
+                  Market Sentiment
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">Bullish</span>
+                    <span className="text-xs text-green-600 font-bold">
+                      {analytics.marketSentiment.bullish.toFixed(1)}%
+                    </span>
+                  </div>
+                  <Progress
+                    value={analytics.marketSentiment.bullish}
+                    className="h-1.5"
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">Bearish</span>
+                    <span className="text-xs text-red-600 font-bold">
+                      {analytics.marketSentiment.bearish.toFixed(1)}%
+                    </span>
+                  </div>
+                  <Progress
+                    value={analytics.marketSentiment.bearish}
+                    className="h-1.5"
+                  />
+                </div>
+                <div className="pt-2 border-t">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Recent (30 days):</span>
-                    <Badge variant="default">
-                      {analytics.timeAnalysis.recentActivity}
-                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Confidence:
+                    </span>
+                    <span className="text-xs font-medium">
+                      {analytics.marketSentiment.confidence.toFixed(1)}%
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Older positions:</span>
-                    <Badge variant="secondary">
-                      {analytics.timeAnalysis.oldActivity}
-                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Volatility:
+                    </span>
+                    <span className="text-xs font-medium">
+                      {analytics.marketSentiment.volatility.toFixed(1)}%
+                    </span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
+            {/* Portfolio Health Card */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Leverage Distribution
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Gauge className="h-4 w-4" />
+                  Portfolio Health
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">High (&gt;20x):</span>
-                    <Badge variant="destructive">
+                    <span className="text-xs text-muted-foreground">
+                      Risk Score:
+                    </span>
+                    <span
+                      className={`text-xs font-bold ${getRiskColor(analytics.riskMetrics.riskScore)}`}
+                    >
+                      {Math.round(analytics.riskMetrics.riskScore)}/100
+                    </span>
+                  </div>
+                  <Progress
+                    value={analytics.riskMetrics.riskScore}
+                    className="h-1.5"
+                  />
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      Diversification:
+                    </span>
+                    <span className="text-xs font-bold text-blue-600">
+                      {analytics.riskMetrics.diversification.toFixed(1)}%
+                    </span>
+                  </div>
+                  <Progress
+                    value={analytics.riskMetrics.diversification}
+                    className="h-1.5"
+                  />
+                </div>
+                <div className="pt-2 border-t text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-red-600">
+                      High Risk: {analytics.riskMetrics.highRisk}
+                    </span>
+                    <span className="text-green-600">
+                      Low Risk: {analytics.riskMetrics.lowRisk}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Trading Activity Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Activity className="h-4 w-4" />
+                  Trading Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      Total Positions:
+                    </span>
+                    <span className="text-xs font-bold">
+                      {allPositions.length.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      Active:
+                    </span>
+                    <span className="text-xs font-bold text-green-600">
+                      {analytics.performanceMetrics.activePositions}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      Closed:
+                    </span>
+                    <span className="text-xs font-bold text-gray-600">
+                      {analytics.performanceMetrics.closedPositions}
+                    </span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      Recent (30d):
+                    </span>
+                    <span className="text-xs font-bold text-blue-600">
+                      {analytics.timeAnalysis.recentActivity}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      Avg Hold Time:
+                    </span>
+                    <span className="text-xs font-bold">
+                      {analytics.performanceMetrics.avgHoldingTime.toFixed(1)}d
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Leverage Overview Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Zap className="h-4 w-4" />
+                  Leverage Analysis
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      Avg Leverage:
+                    </span>
+                    <span className="text-xs font-bold">
+                      {analytics.leverageAnalysis.avgLeverage.toFixed(1)}x
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-red-600">
+                      High (&gt;20x):
+                    </span>
+                    <span className="text-xs font-bold">
                       {analytics.leverageAnalysis.highLeverage}
-                    </Badge>
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Medium (5-20x):</span>
-                    <Badge variant="default">
+                    <span className="text-xs text-yellow-600">
+                      Med (5-20x):
+                    </span>
+                    <span className="text-xs font-bold">
                       {analytics.leverageAnalysis.mediumLeverage}
-                    </Badge>
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Low (&lt;5x):</span>
-                    <Badge variant="secondary">
+                    <span className="text-xs text-green-600">
+                      Low (&lt;5x):
+                    </span>
+                    <span className="text-xs font-bold">
                       {analytics.leverageAnalysis.lowLeverage}
-                    </Badge>
+                    </span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      Efficiency:
+                    </span>
+                    <span
+                      className={`text-xs font-bold ${getPerformanceColor(analytics.leverageAnalysis.leverageEfficiency)}`}
+                    >
+                      {formatCurrency(
+                        analytics.leverageAnalysis.leverageEfficiency,
+                      )}
+                    </span>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
 
-        <TabsContent value="performance" className="space-y-6">
+          {/* Top Performers and Losers */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Star className="h-5 w-5 text-yellow-500" />
+                  Best Performing Assets
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {analytics.assetAnalysis
+                    .filter((asset) => asset.totalPnL > 0)
+                    .sort((a, b) => b.totalPnL - a.totalPnL)
+                    .slice(0, 5)
+                    .map((asset, index) => (
+                      <div
+                        key={asset.asset}
+                        className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <div className="font-medium text-sm">
+                              {asset.asset}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {asset.totalPositions} positions •{" "}
+                              {asset.winRate.toFixed(1)}% win rate
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-green-600">
+                            {formatCurrency(asset.totalPnL)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {asset.sentiment === "bullish" ? "📈" : "📉"}{" "}
+                            {asset.sentiment}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  {analytics.assetAnalysis.filter((asset) => asset.totalPnL > 0)
+                    .length === 0 && (
+                    <div className="text-center text-muted-foreground text-sm py-4">
+                      No profitable assets found
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-red-500" />
+                  Worst Performing Assets
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {analytics.assetAnalysis
+                    .filter((asset) => asset.totalPnL < 0)
+                    .sort((a, b) => a.totalPnL - b.totalPnL)
+                    .slice(0, 5)
+                    .map((asset, index) => (
+                      <div
+                        key={asset.asset}
+                        className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <div className="font-medium text-sm">
+                              {asset.asset}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {asset.totalPositions} positions •{" "}
+                              {asset.winRate.toFixed(1)}% win rate
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-red-600">
+                            {formatCurrency(asset.totalPnL)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {asset.sentiment === "bullish" ? "📈" : "📉"}{" "}
+                            {asset.sentiment}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  {analytics.assetAnalysis.filter((asset) => asset.totalPnL < 0)
+                    .length === 0 && (
+                    <div className="text-center text-muted-foreground text-sm py-4">
+                      No losing assets found
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Wallet Analysis */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Gauge className="h-5 w-5" />
-                Performance Metrics
+                <Wallet className="h-5 w-5" />
+                Wallet Distribution Analysis
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-medium mb-3">Total P&L Distribution</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-4">
+                  <h4 className="font-medium text-sm">Wallet Overview</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center p-2 bg-muted rounded">
+                      <span className="text-sm">Unique Wallets:</span>
+                      <span className="font-bold">
+                        {analytics.walletAnalysis.uniqueWallets}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-2 bg-muted rounded">
+                      <span className="text-sm">Diversity Score:</span>
+                      <span className="font-bold text-blue-600">
+                        {analytics.walletAnalysis.diversityScore.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-2 bg-muted rounded">
+                      <span className="text-sm">Concentration Risk:</span>
+                      <span
+                        className={`font-bold ${analytics.walletAnalysis.concentrationRisk > 50 ? "text-red-600" : analytics.walletAnalysis.concentrationRisk > 25 ? "text-yellow-600" : "text-green-600"}`}
+                      >
+                        {analytics.walletAnalysis.concentrationRisk.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <h4 className="font-medium text-sm mb-4">
+                    Top Performing Wallets
+                  </h4>
                   <div className="space-y-2">
-                    {analytics.performanceMetrics.totalPnL >= 0 ? (
-                      <div className="flex justify-between items-center p-2 bg-muted rounded">
-                        <span className="text-sm">Positive PnL:</span>
-                        <div className="text-right">
-                          <div className="text-sm font-medium">
-                            {formatCurrency(
-                              analytics.performanceMetrics.totalPnL,
-                            )}
+                    {analytics.walletAnalysis.topPerformers
+                      .slice(0, 5)
+                      .map((wallet, index) => (
+                        <div
+                          key={wallet.address}
+                          className="flex items-center justify-between p-2 bg-muted rounded text-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">
+                              {index + 1}
+                            </div>
+                            <span className="font-mono text-xs">
+                              {wallet.address?.slice(0, 8)}...
+                              {wallet.address?.slice(-6)}
+                            </span>
                           </div>
-                          <div className="text-xs text-green-600">
-                            {analytics.performanceMetrics.winRate.toFixed(1)}%
-                            Win Rate
+                          <div className="text-right">
+                            <div
+                              className={`font-bold ${getPerformanceColor(wallet.totalPnL)}`}
+                            >
+                              {formatCurrency(wallet.totalPnL)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {wallet.positions} pos •{" "}
+                              {wallet.winRate.toFixed(1)}% win
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="flex justify-between items-center p-2 bg-muted rounded">
-                        <span className="text-sm">Negative PnL:</span>
-                        <div className="text-right">
-                          <div className="text-sm font-medium">
-                            {formatCurrency(
-                              analytics.performanceMetrics.totalPnL,
-                            )}
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Time-based Analysis */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Trading Hours Distribution
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-6 gap-1">
+                    {analytics.timeAnalysis.hourlyDistribution.map(
+                      (hour, index) => {
+                        const maxCount = Math.max(
+                          ...analytics.timeAnalysis.hourlyDistribution.map(
+                            (h) => h.count,
+                          ),
+                        );
+                        const intensity =
+                          maxCount > 0 ? (hour.count / maxCount) * 100 : 0;
+                        return (
+                          <div key={index} className="text-center">
+                            <div
+                              className="w-full h-8 bg-blue-100 dark:bg-blue-900 rounded mb-1 flex items-end justify-center"
+                              style={{
+                                background: `linear-gradient(to top, rgb(59 130 246 / ${intensity}%) 0%, transparent 100%)`,
+                              }}
+                            >
+                              <span className="text-xs font-bold text-blue-800 dark:text-blue-200">
+                                {hour.count > 0 ? hour.count : ""}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {hour.hour.toString().padStart(2, "0")}
+                            </div>
                           </div>
-                          <div className="text-xs text-red-600">
-                            {analytics.performanceMetrics.winRate.toFixed(1)}%
-                            Win Rate
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      },
                     )}
                   </div>
+                  <div className="text-xs text-muted-foreground text-center">
+                    Peak trading hours:{" "}
+                    {
+                      analytics.timeAnalysis.hourlyDistribution.reduce(
+                        (max, hour) => (hour.count > max.count ? hour : max),
+                        { hour: 0, count: 0 },
+                      ).hour
+                    }
+                    :00
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-medium mb-3">Risk and Return Metrics</h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">Sharpe Ratio:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {formatNumber(
-                            analytics.performanceMetrics.sharpeRatio,
-                            2,
-                          )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Weekly Trading Pattern
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {analytics.timeAnalysis.weeklyDistribution.map(
+                    (day, index) => {
+                      const maxCount = Math.max(
+                        ...analytics.timeAnalysis.weeklyDistribution.map(
+                          (d) => d.count,
+                        ),
+                      );
+                      const percentage =
+                        maxCount > 0 ? (day.count / maxCount) * 100 : 0;
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between"
+                        >
+                          <span className="text-sm font-medium w-20">
+                            {day.day}
+                          </span>
+                          <div className="flex-1 mx-3">
+                            <Progress value={percentage} className="h-2" />
+                          </div>
+                          <span className="text-sm font-bold w-12 text-right">
+                            {day.count}
+                          </span>
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          Risk-Adjusted Return
-                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Market Conditions and Seasonal Analysis */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Compass className="h-5 w-5" />
+                  Market Conditions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-muted rounded">
+                      <div className="text-2xl font-bold text-primary">
+                        {analytics.marketConditions.volatilityIndex.toFixed(1)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Volatility Index
                       </div>
                     </div>
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">Max Drawdown:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {formatNumber(
-                            analytics.performanceMetrics.maxDrawdown,
-                            1,
-                          )}
-                          %
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Worst Performing:{" "}
-                          {analytics.performanceMetrics.worstPerformer?.asset}
-                        </div>
+                    <div className="text-center p-3 bg-muted rounded">
+                      <div className="text-2xl font-bold text-primary">
+                        {analytics.marketConditions.trendStrength.toFixed(1)}%
                       </div>
-                    </div>
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">Profit Factor:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {formatNumber(
-                            analytics.performanceMetrics.profitFactor,
-                            2,
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {analytics.performanceMetrics.profitFactor > 1
-                            ? "Positive"
-                            : "Negative"}
-                        </div>
+                      <div className="text-xs text-muted-foreground">
+                        Trend Strength
                       </div>
                     </div>
                   </div>
+                  <div className="text-center p-3 border rounded">
+                    <div className="text-lg font-bold">
+                      {analytics.marketConditions.marketPhase
+                        .replace("_", " ")
+                        .toUpperCase()}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Current Market Phase
+                    </div>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Snowflake className="h-5 w-5" />
+                  Seasonal Performance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {analytics.timeAnalysis.seasonalPatterns.map(
+                    (season, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-2 bg-muted rounded"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="text-lg">
+                            {season.season === "Winter"
+                              ? "❄️"
+                              : season.season === "Spring"
+                                ? "🌸"
+                                : season.season === "Summer"
+                                  ? "☀️"
+                                  : "🍂"}
+                          </div>
+                          <div>
+                            <div className="font-medium text-sm">
+                              {season.season}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {season.count} positions
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div
+                            className={`font-bold text-sm ${getPerformanceColor(season.totalPnL)}`}
+                          >
+                            {formatCurrency(season.totalPnL)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {season.winRate.toFixed(1)}% win rate
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Advanced Metrics Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                Advanced Financial Metrics
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="text-center p-3 bg-muted rounded">
+                  <div className="text-lg font-bold text-primary">
+                    {analytics.advancedMetrics.kellyCriterion.toFixed(3)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Kelly Criterion
+                  </div>
+                </div>
+                <div className="text-center p-3 bg-muted rounded">
+                  <div className="text-lg font-bold text-primary">
+                    {analytics.advancedMetrics.informationRatio.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Information Ratio
+                  </div>
+                </div>
+                <div className="text-center p-3 bg-muted rounded">
+                  <div className="text-lg font-bold text-primary">
+                    {analytics.advancedMetrics.calmarRatio.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Calmar Ratio
+                  </div>
+                </div>
+                <div className="text-center p-3 bg-muted rounded">
+                  <div className="text-lg font-bold text-primary">
+                    {analytics.advancedMetrics.sortinoRatio.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Sortino Ratio
+                  </div>
+                </div>
+                <div className="text-center p-3 bg-muted rounded">
+                  <div className="text-lg font-bold text-primary">
+                    {analytics.advancedMetrics.treynorRatio.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Treynor Ratio
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Insights */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lightbulb className="h-5 w-5" />
+                Quick Insights & Alerts
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Performance Alert */}
+                {analytics.performanceMetrics.totalPnL < 0 && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Performance Alert</AlertTitle>
+                    <AlertDescription>
+                      Portfolio is currently negative. Consider reviewing
+                      high-risk positions.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Risk Alert */}
+                {analytics.riskMetrics.riskScore > 70 && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>High Risk Warning</AlertTitle>
+                    <AlertDescription>
+                      Risk score is{" "}
+                      {Math.round(analytics.riskMetrics.riskScore)}/100.
+                      Consider reducing leverage.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Concentration Alert */}
+                {analytics.walletAnalysis.concentrationRisk > 50 && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Concentration Risk</AlertTitle>
+                    <AlertDescription>
+                      {analytics.walletAnalysis.concentrationRisk.toFixed(1)}%
+                      of PnL from single wallet. Consider diversification.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Success Alert */}
+                {analytics.performanceMetrics.winRate > 70 && (
+                  <Alert>
+                    <CheckCircle className="h-4 w-4" />
+                    <AlertTitle>Excellent Performance</AlertTitle>
+                    <AlertDescription>
+                      {analytics.performanceMetrics.winRate.toFixed(1)}% win
+                      rate is exceptional. Keep up the strategy!
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Volume Alert */}
+                {analytics.performanceMetrics.totalVolume > 10000000 && (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>High Volume Trader</AlertTitle>
+                    <AlertDescription>
+                      Total volume:{" "}
+                      {formatCurrency(analytics.performanceMetrics.totalVolume)}
+                      . You're a whale! 🐋
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Leverage Alert */}
+                {analytics.leverageAnalysis.avgLeverage > 30 && (
+                  <Alert>
+                    <Zap className="h-4 w-4" />
+                    <AlertTitle>High Leverage Usage</AlertTitle>
+                    <AlertDescription>
+                      Average leverage:{" "}
+                      {analytics.leverageAnalysis.avgLeverage.toFixed(1)}x.
+                      Monitor positions closely.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -2238,29 +3047,563 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="opportunities" className="space-y-6">
-          {/* Professional Trader Analysis */}
+        <TabsContent value="opportunities" className="space-y-8">
+          {/* AI Trading Recommendations */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Brain className="h-5 w-5" />
-                Smart Money Analysis - Professional Traders
+                AI Trading Recommendations
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Analysis based on 100 professional traders' positions (excluding
-                extreme winners/losers)
+                AI recommendations based on position data analysis: P&L
+                performance, win rates, position directions, leverage usage, and
+                volume patterns. Covers all cryptocurrencies with available
+                position data.
               </p>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {analytics.professionalTraderAnalysis
-                  .filter((analysis) => analysis.totalPositions >= 3)
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                {analytics.tradingOpportunities.aiRecommendations
+                  .slice(0, 18)
+                  .map((rec, i) => {
+                    const getRecommendationColor = (recommendation: string) => {
+                      switch (recommendation) {
+                        case "LONG":
+                          return "bg-green-500 text-white";
+                        case "SHORT":
+                          return "bg-red-500 text-white";
+                        default:
+                          return "bg-gray-500 text-white";
+                      }
+                    };
+
+                    const getConfidenceColor = (confidence: number) => {
+                      if (confidence >= 80) return "text-green-600";
+                      if (confidence >= 60) return "text-yellow-600";
+                      return "text-red-600";
+                    };
+
+                    return (
+                      <div
+                        key={i}
+                        className="p-4 border rounded-lg bg-card hover:shadow-md transition-all duration-200"
+                      >
+                        {/* Header */}
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="text-lg font-bold text-primary">
+                              {rec.asset}
+                            </h3>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge
+                                className={getRecommendationColor(
+                                  rec.recommendation,
+                                )}
+                                size="sm"
+                              >
+                                {rec.recommendation}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {rec.totalPositions} pos
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-bold">
+                              {formatCurrency(rec.currentPrice)}
+                            </div>
+                            <div
+                              className={`text-xs font-medium ${
+                                rec.priceChange >= 0
+                                  ? "text-green-600"
+                                  : "text-red-600"
+                              }`}
+                            >
+                              {rec.priceChange >= 0 ? "+" : ""}
+                              {rec.priceChange.toFixed(1)}%
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Confidence Score */}
+                        <div className="mb-3">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-medium">
+                              Confidence
+                            </span>
+                            <span
+                              className={`text-sm font-bold ${getConfidenceColor(rec.confidence)}`}
+                            >
+                              {rec.confidence}%
+                            </span>
+                          </div>
+                          <Progress value={rec.confidence} className="h-1" />
+                        </div>
+
+                        {/* Key Metrics */}
+                        <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+                          <div className="bg-muted/30 p-2 rounded">
+                            <div className="text-xs text-muted-foreground">
+                              Entry
+                            </div>
+                            <div className="font-medium text-xs">
+                              {formatCurrency(rec.entryPrice)}
+                            </div>
+                          </div>
+                          <div className="bg-muted/30 p-2 rounded">
+                            <div className="text-xs text-muted-foreground">
+                              Win Rate
+                            </div>
+                            <div
+                              className={`font-medium text-xs ${
+                                rec.winRate >= 60
+                                  ? "text-green-600"
+                                  : rec.winRate >= 40
+                                    ? "text-yellow-600"
+                                    : "text-red-600"
+                              }`}
+                            >
+                              {rec.winRate.toFixed(0)}%
+                            </div>
+                          </div>
+                          <div className="bg-muted/30 p-2 rounded">
+                            <div className="text-xs text-muted-foreground">
+                              Avg P&L
+                            </div>
+                            <div
+                              className={`font-medium text-xs ${getPerformanceColor(rec.avgPnL)}`}
+                            >
+                              {formatCurrency(rec.avgPnL)}
+                            </div>
+                          </div>
+                          <div className="bg-muted/30 p-2 rounded">
+                            <div className="text-xs text-muted-foreground">
+                              Risk
+                            </div>
+                            <div
+                              className={`font-medium text-xs ${
+                                rec.riskLevel === "Low"
+                                  ? "text-green-600"
+                                  : rec.riskLevel === "Medium"
+                                    ? "text-yellow-600"
+                                    : "text-red-600"
+                              }`}
+                            >
+                              {rec.riskLevel}
+                            </div>
+                          </div>
+                          <div className="bg-muted/30 p-2 rounded">
+                            <div className="text-xs text-muted-foreground">
+                              Initial Investment
+                            </div>
+                            <div className="font-medium text-xs text-blue-600">
+                              {formatCurrency(rec.initialInvestment)}
+                            </div>
+                          </div>
+                          <div className="bg-muted/30 p-2 rounded">
+                            <div className="text-xs text-muted-foreground">
+                              L/S Ratio
+                            </div>
+                            <div className="font-medium text-xs">
+                              {rec.longShortRatio}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Long/Short P&L Breakdown */}
+                        <div className="mb-3">
+                          <div className="text-xs font-medium mb-1 text-muted-foreground">
+                            💰 Position P&L Breakdown:
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-green-50 dark:bg-green-900/20 p-2 rounded border border-green-200 dark:border-green-800">
+                              <div className="text-xs text-green-700 dark:text-green-400 font-medium">
+                                Long P&L
+                              </div>
+                              <div
+                                className={`text-xs font-bold ${getPerformanceColor(rec.longPnL)}`}
+                              >
+                                {formatCurrency(rec.longPnL)}
+                              </div>
+                              <div className="text-xs text-green-600/80">
+                                {rec.longCount} positions
+                              </div>
+                            </div>
+                            <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
+                              <div className="text-xs text-red-700 dark:text-red-400 font-medium">
+                                Short P&L
+                              </div>
+                              <div
+                                className={`text-xs font-bold ${getPerformanceColor(rec.shortPnL)}`}
+                              >
+                                {formatCurrency(rec.shortPnL)}
+                              </div>
+                              <div className="text-xs text-red-600/80">
+                                {rec.shortCount} positions
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Position Data Analysis */}
+                        <div className="mb-3">
+                          <div className="text-xs font-medium mb-1 text-muted-foreground">
+                            📊 Analysis Factors:
+                          </div>
+                          <div className="space-y-1">
+                            {rec.reasoning.slice(0, 3).map((reason, idx) => (
+                              <div
+                                key={idx}
+                                className="text-xs text-muted-foreground bg-muted/20 p-1.5 rounded"
+                              >
+                                {reason}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Signal Strength with Explanation */}
+                        <div className="pt-2 border-t">
+                          <div className="mb-2">
+                            <div className="text-xs font-medium text-muted-foreground mb-1">
+                              📈 Signal Analysis (out of {rec.totalPositions}{" "}
+                              positions):
+                            </div>
+                            <div className="text-xs text-muted-foreground mb-1">
+                              Bull/Bear numbers represent different types of
+                              bullish/bearish signals detected from position
+                              analysis, not the total positions. These signals
+                              include: high win rates, positive P&L trends,
+                              position direction bias, volume confidence,
+                              leverage patterns, entry price advantages, and
+                              position count significance. Each signal type is
+                              weighted differently in our recommendation
+                              algorithm.
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                <span>Bull Signals: {rec.signals.bullish}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                                <span>Bear Signals: {rec.signals.bearish}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Signal Strength: {rec.signals.bullishScore} vs{" "}
+                            {rec.signals.bearishScore}
+                          </div>
+                        </div>
+
+                        {/* Action Button */}
+                        <div className="mt-3">
+                          <Button
+                            className={`w-full text-xs ${getRecommendationColor(rec.recommendation)} hover:opacity-90`}
+                            size="sm"
+                          >
+                            {rec.recommendation === "LONG" && "📈 Long"}
+                            {rec.recommendation === "SHORT" && "📉 Short"}
+                            {rec.recommendation === "HOLD" && "📊 Hold"}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Enhanced Crypto Analysis */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Telescope className="h-5 w-5" />
+                Cryptocurrency Position Analysis
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Detailed breakdown of cryptocurrencies with position data and
+                trading insights
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                {analytics.assetAnalysis
+                  .filter((asset) => asset.totalPositions >= 1)
                   .sort((a, b) => b.totalPositions - a.totalPositions)
-                  .slice(0, 9)
+                  .slice(0, 15)
+                  .map((asset, i) => {
+                    // Calculate current price estimate based on recent positions
+                    const recentPositions = asset.positions.filter((p) => {
+                      if (!p.created_at) return false;
+                      const createdTime = new Date(p.created_at).getTime();
+                      const thirtyDaysAgo =
+                        Date.now() - 30 * 24 * 60 * 60 * 1000;
+                      return createdTime > thirtyDaysAgo;
+                    });
+
+                    const currentPriceEstimate =
+                      asset.currentPrice || asset.avgEntryPrice;
+                    const priceChange = asset.priceChange || 0;
+
+                    const totalVolume = asset.positions.reduce(
+                      (sum, p) => sum + Math.abs(p.size || 0),
+                      0,
+                    );
+                    const avgLeverage = asset.positions
+                      .filter((p) => p.leverage && p.leverage > 0)
+                      .reduce(
+                        (sum, p, _, arr) =>
+                          sum + (p.leverage || 0) / arr.length,
+                        0,
+                      );
+
+                    return (
+                      <div
+                        key={i}
+                        className="p-4 border rounded-lg bg-card hover:shadow-md transition-all duration-200"
+                      >
+                        {/* Header */}
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="text-xl font-bold text-primary">
+                              {asset.asset}
+                            </h3>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge
+                                variant={
+                                  asset.sentiment === "bullish"
+                                    ? "default"
+                                    : "destructive"
+                                }
+                                className="text-xs"
+                              >
+                                {asset.sentiment.toUpperCase()}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {asset.totalPositions} positions
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-bold">
+                              {formatCurrency(currentPriceEstimate)}
+                            </div>
+                            <div
+                              className={`text-sm font-medium ${
+                                priceChange >= 0
+                                  ? "text-green-600"
+                                  : "text-red-600"
+                              }`}
+                            >
+                              {priceChange >= 0 ? "+" : ""}
+                              {priceChange.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Est. Current Price
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Position Distribution */}
+                        <div className="mb-4">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium">
+                              Position Distribution
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {asset.longCount + asset.shortCount} total
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                              <div className="flex items-center gap-2 mb-1">
+                                <ArrowUpRight className="h-4 w-4 text-green-600" />
+                                <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                                  Long
+                                </span>
+                              </div>
+                              <div className="text-2xl font-bold text-green-600">
+                                {asset.longCount}
+                              </div>
+                              <div className="text-xs text-green-600/80">
+                                {(
+                                  (asset.longCount / asset.totalPositions) *
+                                  100
+                                ).toFixed(0)}
+                                %
+                              </div>
+                            </div>
+                            <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800">
+                              <div className="flex items-center gap-2 mb-1">
+                                <ArrowDownRight className="h-4 w-4 text-red-600" />
+                                <span className="text-sm font-medium text-red-700 dark:text-red-400">
+                                  Short
+                                </span>
+                              </div>
+                              <div className="text-2xl font-bold text-red-600">
+                                {asset.shortCount}
+                              </div>
+                              <div className="text-xs text-red-600/80">
+                                {(
+                                  (asset.shortCount / asset.totalPositions) *
+                                  100
+                                ).toFixed(0)}
+                                %
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Key Metrics */}
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="bg-muted/50 p-2 rounded">
+                              <div className="text-xs text-muted-foreground">
+                                Avg Entry
+                              </div>
+                              <div className="font-medium">
+                                {formatCurrency(asset.avgEntryPrice)}
+                              </div>
+                            </div>
+                            <div className="bg-muted/50 p-2 rounded">
+                              <div className="text-xs text-muted-foreground">
+                                Total P&L
+                              </div>
+                              <div
+                                className={`font-medium ${getPerformanceColor(asset.totalPnL)}`}
+                              >
+                                {formatCurrency(asset.totalPnL)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="bg-muted/50 p-2 rounded">
+                              <div className="text-xs text-muted-foreground">
+                                Win Rate
+                              </div>
+                              <div
+                                className={`font-medium ${
+                                  asset.winRate >= 60
+                                    ? "text-green-600"
+                                    : asset.winRate >= 40
+                                      ? "text-yellow-600"
+                                      : "text-red-600"
+                                }`}
+                              >
+                                {asset.winRate.toFixed(1)}%
+                              </div>
+                            </div>
+                            <div className="bg-muted/50 p-2 rounded">
+                              <div className="text-xs text-muted-foreground">
+                                Avg Leverage
+                              </div>
+                              <div className="font-medium">
+                                {avgLeverage > 0
+                                  ? `${avgLeverage.toFixed(1)}x`
+                                  : "N/A"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="bg-muted/50 p-2 rounded">
+                            <div className="text-xs text-muted-foreground mb-1">
+                              Total Volume
+                            </div>
+                            <div className="font-medium">
+                              {totalVolume > 1000000
+                                ? `${(totalVolume / 1000000).toFixed(1)}M`
+                                : totalVolume > 1000
+                                  ? `${(totalVolume / 1000).toFixed(0)}K`
+                                  : `${totalVolume.toFixed(0)}`}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Performance Indicators */}
+                        <div className="mt-4 pt-3 border-t">
+                          <div className="flex justify-between items-center text-xs">
+                            <div className="flex items-center gap-1">
+                              <div
+                                className={`w-2 h-2 rounded-full ${
+                                  asset.momentum > 0
+                                    ? "bg-green-500"
+                                    : "bg-red-500"
+                                }`}
+                              ></div>
+                              <span className="text-muted-foreground">
+                                Momentum:{" "}
+                                {asset.momentum > 0 ? "Positive" : "Negative"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div
+                                className={`w-2 h-2 rounded-full ${
+                                  asset.sharpeRatio > 1
+                                    ? "bg-green-500"
+                                    : asset.sharpeRatio > 0
+                                      ? "bg-yellow-500"
+                                      : "bg-red-500"
+                                }`}
+                              ></div>
+                              <span className="text-muted-foreground">
+                                Risk-Adj: {asset.sharpeRatio.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Quick Action Suggestion */}
+                        {asset.totalPositions >= 5 && (
+                          <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                            <div className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">
+                              💡 Trading Insight
+                            </div>
+                            <div className="text-xs text-blue-600 dark:text-blue-300">
+                              {asset.longCount > asset.shortCount * 2
+                                ? `Strong bullish sentiment - ${asset.longCount} longs vs ${asset.shortCount} shorts`
+                                : asset.shortCount > asset.longCount * 2
+                                  ? `Strong bearish sentiment - ${asset.shortCount} shorts vs ${asset.longCount} longs`
+                                  : "Balanced sentiment - mixed positioning"}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Professional Trader Analysis - Simplified */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5" />
+                Smart Money Signals
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Professional trader positioning analysis based on filtered
+                position data
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {analytics.professionalTraderAnalysis
+                  .filter((analysis) => analysis.totalPositions >= 2)
+                  .sort((a, b) => b.totalPositions - a.totalPositions)
+                  .slice(0, 12)
                   .map((analysis, i) => (
-                    <div key={i} className="p-4 border rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-medium">{analysis.asset}</span>
+                    <div key={i} className="p-3 border rounded-lg bg-card">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="font-bold text-lg">
+                          {analysis.asset}
+                        </span>
                         <Badge
                           variant={
                             analysis.sentiment === "strong_bullish"
@@ -2280,25 +3623,25 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
 
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span>Professionals:</span>
+                          <span className="text-muted-foreground">
+                            Pros Trading:
+                          </span>
                           <span className="font-medium">
                             {analysis.totalPositions}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span>Long/Short:</span>
-                          <span className="font-medium">
+                          <span className="text-muted-foreground">
+                            L/S Ratio:
+                          </span>
+                          <span className="font-medium text-primary">
                             {analysis.longPositions}/{analysis.shortPositions}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span>Avg Entry:</span>
-                          <span className="font-medium">
-                            {formatCurrency(analysis.avgEntryPrice)}
+                          <span className="text-muted-foreground">
+                            Avg PnL:
                           </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Avg PnL:</span>
                           <span
                             className={`font-medium ${getPerformanceColor(analysis.avgSmartPnL)}`}
                           >
@@ -2306,17 +3649,20 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span>Win Rate:</span>
-                          <span className="font-medium">
-                            {analysis.winRate.toFixed(1)}%
+                          <span className="text-muted-foreground">
+                            Success Rate:
                           </span>
-                        </div>
-
-                        <div className="pt-2 border-t">
-                          <div className="text-xs text-muted-foreground">
-                            Bullish: {analysis.longPercentage.toFixed(1)}% |
-                            Bearish: {analysis.shortPercentage.toFixed(1)}%
-                          </div>
+                          <span
+                            className={`font-medium ${
+                              analysis.winRate >= 60
+                                ? "text-green-600"
+                                : analysis.winRate >= 40
+                                  ? "text-yellow-600"
+                                  : "text-red-600"
+                            }`}
+                          >
+                            {analysis.winRate.toFixed(0)}%
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -2582,245 +3928,36 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
             </Card>
           )}
 
-          <Alert>
-            <Lightbulb className="h-4 w-4" />
-            <AlertTitle>Smart Money Trading Strategy</AlertTitle>
-            <AlertDescription>
-              Our analysis tracks 100 professional traders and identifies
-              opportunities based on their collective positioning. We filter out
-              extreme winners/losers to focus on actionable signals. Long
-              opportunities favor assets where professionals are bullish with
-              good performance, while short opportunities target assets where
-              professionals are bearish or showing losses. Contrarian plays
-              identify when smart money might be wrong.
-            </AlertDescription>
-          </Alert>
-        </TabsContent>
+          {/* Explanation Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Alert>
+              <Brain className="h-4 w-4" />
+              <AlertTitle>📊 Bull/Bear Signal Explanation</AlertTitle>
+              <AlertDescription>
+                <strong>Bull: X</strong> and <strong>Bear: Y</strong> represent
+                the number of different bullish and bearish signals detected
+                from position analysis, not the total positions. These signals
+                include: high win rates, positive P&L trends, position direction
+                bias, volume confidence, leverage patterns, entry price
+                advantages, and position count significance. Each signal type is
+                weighted differently in our recommendation algorithm.
+              </AlertDescription>
+            </Alert>
 
-        <TabsContent value="risk" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Risk Distribution
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold text-red-600">
-                    {analytics.riskMetrics.highRisk}
-                  </div>
-                  <div className="text-sm text-muted-foreground">High Risk</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    &gt;25x leverage or &gt;$50K PnL
-                  </div>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold text-yellow-600">
-                    {analytics.riskMetrics.mediumRisk}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Medium Risk
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    10-25x leverage or $10K-$50K PnL
-                  </div>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
-                    {analytics.riskMetrics.lowRisk}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Low Risk</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    &lt;10x leverage and &lt;$10K PnL
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Risk Management Recommendations</AlertTitle>
-            <AlertDescription>
-              Consider diversifying positions with high leverage or large PnL
-              exposure. Monitor positions with extreme entry prices as they may
-              indicate higher volatility risk.
-            </AlertDescription>
-          </Alert>
-        </TabsContent>
-
-        <TabsContent value="advanced" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Star className="h-5 w-5" />
-                Advanced Metrics
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-medium mb-3">Risk Adjusted Returns</h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">High Leverage:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {formatNumber(
-                            analytics.leverageAnalysis.riskAdjustedReturns.high,
-                            2,
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          High Leverage PnL
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">Medium Leverage:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {formatNumber(
-                            analytics.leverageAnalysis.riskAdjustedReturns
-                              .medium,
-                            2,
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Medium Leverage PnL
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">Low Leverage:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {formatNumber(
-                            analytics.leverageAnalysis.riskAdjustedReturns.low,
-                            2,
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Low Leverage PnL
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-3">Market Conditions</h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">Volatility Index:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {formatNumber(
-                            analytics.marketConditions.volatilityIndex,
-                            1,
-                          )}
-                          %
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Market Volatility
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">Trend Strength:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {formatNumber(
-                            analytics.marketConditions.trendStrength,
-                            1,
-                          )}
-                          %
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Market Trend
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center p-2 bg-muted rounded">
-                      <span className="text-sm">Market Phase:</span>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {analytics.marketConditions.marketPhase}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Current Market State
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="h-5 w-5" />
-                Correlation Matrix
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {analytics.marketConditions.correlationMatrix.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No correlation data available
-                  </p>
-                ) : (
-                  analytics.marketConditions.correlationMatrix.map(
-                    (correlation, index) => (
-                      <div key={index} className="p-3 border rounded-lg">
-                        <div className="font-medium text-sm">
-                          {correlation.pair}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {correlation.type} Correlation ({correlation.strength}
-                          )
-                        </div>
-                      </div>
-                    ),
-                  )
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Seasonality Patterns
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {analytics.timeAnalysis.seasonalPatterns.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No seasonal patterns detected
-                  </p>
-                ) : (
-                  analytics.timeAnalysis.seasonalPatterns.map(
-                    (season, index) => (
-                      <div key={index} className="p-3 border rounded-lg">
-                        <div className="font-medium text-sm">
-                          {season.season}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {season.performance} Performance
-                        </div>
-                      </div>
-                    ),
-                  )
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            <Alert>
+              <Lightbulb className="h-4 w-4" />
+              <AlertTitle>💡 Data Coverage</AlertTitle>
+              <AlertDescription>
+                AI recommendations now cover{" "}
+                <strong>all cryptocurrencies</strong> with available position
+                data (minimum 1 position). The system analyzes P&L performance,
+                win rates, position directions, leverage usage, position sizes,
+                entry prices, and trading volumes. All recommendations are
+                derived purely from actual trading position data without
+                external market insights.
+              </AlertDescription>
+            </Alert>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
