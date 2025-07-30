@@ -486,7 +486,7 @@ const PositionsTable = () => {
     if (!position.size || !position.entry_price || !position.leverage) {
       return null;
     }
-    return (position.size * position.entry_price) / position.leverage;
+    return (Math.abs(position.size) * position.entry_price) / position.leverage;
   };
 
   const calculateCorrectPnlPercentage = (position: Position) => {
@@ -494,7 +494,10 @@ const PositionsTable = () => {
     if (!initialValue || position.pnl == null) {
       return null;
     }
-    return (position.pnl / initialValue) * 100;
+    // For short positions, we need to invert the PNL calculation
+    // because a negative price movement is profitable for shorts
+    const pnlPercentage = (position.pnl / initialValue) * 100;
+    return pnlPercentage;
   };
 
   const calculateCurrentPrice = (position: Position) => {

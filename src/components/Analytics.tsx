@@ -89,6 +89,65 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper functions - moved to top to be available in useMemo
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
+  const formatPercentage = (value: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "percent",
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(value / 100);
+  };
+
+  const formatNumber = (value: number, decimals: number = 2) => {
+    return new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(value);
+  };
+
+  const getRiskColor = (score: number) => {
+    if (score < 30) return "text-green-600";
+    if (score < 60) return "text-yellow-600";
+    return "text-red-600";
+  };
+
+  const getPerformanceColor = (value: number) => {
+    return value >= 0 ? "text-green-600" : "text-red-600";
+  };
+
+  const getSentimentColor = (sentiment: string) => {
+    switch (sentiment) {
+      case "bullish":
+        return "text-green-600";
+      case "bearish":
+        return "text-red-600";
+      default:
+        return "text-yellow-600";
+    }
+  };
+
+  const getConfidenceColor = (confidence: string) => {
+    switch (confidence) {
+      case "high":
+        return "bg-green-500 text-white";
+      case "medium":
+        return "bg-yellow-500 text-black";
+      case "low":
+        return "bg-red-500 text-white";
+      default:
+        return "bg-gray-500 text-white";
+    }
+  };
+
   const fetchAllPositions = async () => {
     setLoading(true);
     setError(null);
@@ -1532,64 +1591,6 @@ const Analytics = ({ onBack = () => {} }: AnalyticsProps) => {
       },
     };
   }, [allPositions]);
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-  };
-
-  const formatPercentage = (value: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "percent",
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }).format(value / 100);
-  };
-
-  const formatNumber = (value: number, decimals: number = 2) => {
-    return new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    }).format(value);
-  };
-
-  const getRiskColor = (score: number) => {
-    if (score < 30) return "text-green-600";
-    if (score < 60) return "text-yellow-600";
-    return "text-red-600";
-  };
-
-  const getPerformanceColor = (value: number) => {
-    return value >= 0 ? "text-green-600" : "text-red-600";
-  };
-
-  const getSentimentColor = (sentiment: string) => {
-    switch (sentiment) {
-      case "bullish":
-        return "text-green-600";
-      case "bearish":
-        return "text-red-600";
-      default:
-        return "text-yellow-600";
-    }
-  };
-
-  const getConfidenceColor = (confidence: string) => {
-    switch (confidence) {
-      case "high":
-        return "bg-green-500 text-white";
-      case "medium":
-        return "bg-yellow-500 text-black";
-      case "low":
-        return "bg-red-500 text-white";
-      default:
-        return "bg-gray-500 text-white";
-    }
-  };
 
   if (error) {
     return (
