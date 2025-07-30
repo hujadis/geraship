@@ -6,9 +6,13 @@ import { Wallet, BarChart3 } from "lucide-react";
 
 interface HomeProps {
   onNavigateToWallets?: () => void;
+  onNavigateToAnalytics?: () => void;
 }
 
-const Home = ({ onNavigateToWallets = () => {} }: HomeProps) => {
+const Home = ({
+  onNavigateToWallets = () => {},
+  onNavigateToAnalytics = () => {},
+}: HomeProps) => {
   const [searchTerm, setSearchTerm] = useState("");
 
   return (
@@ -30,6 +34,14 @@ const Home = ({ onNavigateToWallets = () => {} }: HomeProps) => {
             >
               <Wallet className="h-4 w-4" />
               View Wallets
+            </Button>
+            <Button
+              onClick={onNavigateToAnalytics}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Analytics
             </Button>
           </div>
         </div>

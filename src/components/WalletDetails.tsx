@@ -416,6 +416,21 @@ const WalletDetails = ({
     }).format(value / 100);
   };
 
+  const calculateInitialValue = (position: Position) => {
+    if (!position.size || !position.entry_price || !position.leverage) {
+      return null;
+    }
+    return (position.size * position.entry_price) / position.leverage;
+  };
+
+  const calculateCorrectPnlPercentage = (position: Position) => {
+    const initialValue = calculateInitialValue(position);
+    if (!initialValue || position.pnl == null) {
+      return null;
+    }
+    return (position.pnl / initialValue) * 100;
+  };
+
   const getRatingColor = (rating: string) => {
     switch (rating) {
       case "A":
@@ -824,6 +839,9 @@ const WalletDetails = ({
                       Leverage{renderSortIcon("leverage")}
                     </Button>
                   </TableHead>
+                  <TableHead className="text-right">
+                    <span className="font-medium">Initial Value</span>
+                  </TableHead>
                   <TableHead className="text-center">
                     <Button
                       variant="ghost"
@@ -892,6 +910,9 @@ const WalletDetails = ({
                         <TableCell className="text-right">
                           <Skeleton className="h-6 w-16 ml-auto" />
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Skeleton className="h-6 w-24 ml-auto" />
+                        </TableCell>
                         <TableCell className="text-center">
                           <Skeleton className="h-6 w-16 mx-auto" />
                         </TableCell>
@@ -931,6 +952,11 @@ const WalletDetails = ({
                           ? `${position.leverage}x`
                           : "N/A"}
                       </TableCell>
+                      <TableCell className="text-right">
+                        {calculateInitialValue(position) != null
+                          ? formatCurrency(calculateInitialValue(position)!)
+                          : "N/A"}
+                      </TableCell>
                       <TableCell className="text-center">
                         <Badge
                           variant={position.is_long ? "default" : "secondary"}
@@ -954,13 +980,15 @@ const WalletDetails = ({
                       <TableCell className="text-right">
                         <Badge
                           variant={
-                            (position.pnl_percentage ?? 0) >= 0
+                            (calculateCorrectPnlPercentage(position) ?? 0) >= 0
                               ? "default"
                               : "destructive"
                           }
                         >
-                          {position.pnl_percentage != null
-                            ? formatPercentage(position.pnl_percentage)
+                          {calculateCorrectPnlPercentage(position) != null
+                            ? formatPercentage(
+                                calculateCorrectPnlPercentage(position)!,
+                              )
                             : "N/A"}
                         </Badge>
                       </TableCell>
@@ -984,7 +1012,7 @@ const WalletDetails = ({
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={11} className="text-center py-8">
                       {activeTab === "current"
                         ? "No active positions found"
                         : "No closed positions found"}

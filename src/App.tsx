@@ -3,12 +3,13 @@ import { useRoutes, Routes, Route } from "react-router-dom";
 import Home from "./components/home";
 import WalletList from "./components/WalletList";
 import WalletDetails from "./components/WalletDetails";
+import Analytics from "./components/Analytics";
 import routes from "tempo-routes";
 
 function App() {
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<
-    "home" | "wallets" | "wallet-details"
+    "home" | "wallets" | "wallet-details" | "analytics"
   >("home");
 
   const handleWalletSelect = (address: string) => {
@@ -47,8 +48,15 @@ function App() {
             onBack={handleBackToHome}
           />
         );
+      case "analytics":
+        return <Analytics onBack={handleBackToHome} />;
       default:
-        return <Home onNavigateToWallets={() => setCurrentView("wallets")} />;
+        return (
+          <Home
+            onNavigateToWallets={() => setCurrentView("wallets")}
+            onNavigateToAnalytics={() => setCurrentView("analytics")}
+          />
+        );
     }
   };
 

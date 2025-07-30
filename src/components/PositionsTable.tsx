@@ -28,7 +28,20 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "./ui/pagination";
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, Filter } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import {
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  Settings,
+} from "lucide-react";
 import { fetchApi } from "../lib/api";
 
 interface Position {
@@ -74,6 +87,23 @@ interface FilterConfig {
   sizeRange: string;
 }
 
+interface ColumnVisibility {
+  id: boolean;
+  asset: boolean;
+  size: boolean;
+  entry_price: boolean;
+  leverage: boolean;
+  initial_value: boolean;
+  current_price: boolean;
+  direction: boolean;
+  pnl: boolean;
+  pnl_percentage: boolean;
+  status: boolean;
+  created_at: boolean;
+  updated_at: boolean;
+  address: boolean;
+}
+
 const PositionsTable = () => {
   const [allPositions, setAllPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -98,6 +128,24 @@ const PositionsTable = () => {
     leverage: "all",
     pnlRange: "all",
     sizeRange: "all",
+  });
+
+  // Column visibility state - ID, Created at, Updated at hidden by default
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibility>({
+    id: false,
+    asset: true,
+    size: true,
+    entry_price: true,
+    leverage: true,
+    initial_value: true,
+    current_price: true,
+    direction: true,
+    pnl: true,
+    pnl_percentage: true,
+    status: true,
+    created_at: false,
+    updated_at: false,
+    address: true,
   });
 
   const fetchAllPositions = async () => {
@@ -355,6 +403,14 @@ const PositionsTable = () => {
     setCurrentPage(1);
   };
 
+  // Handle column visibility changes
+  const handleColumnVisibilityChange = (
+    column: keyof ColumnVisibility,
+    visible: boolean,
+  ) => {
+    setColumnVisibility((prev) => ({ ...prev, [column]: visible }));
+  };
+
   // Generate pagination items
   const generatePaginationItems = () => {
     const items = [];
@@ -424,6 +480,43 @@ const PositionsTable = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value / 100);
+  };
+
+  const calculateInitialValue = (position: Position) => {
+    if (!position.size || !position.entry_price || !position.leverage) {
+      return null;
+    }
+    return (position.size * position.entry_price) / position.leverage;
+  };
+
+  const calculateCorrectPnlPercentage = (position: Position) => {
+    const initialValue = calculateInitialValue(position);
+    if (!initialValue || position.pnl == null) {
+      return null;
+    }
+    return (position.pnl / initialValue) * 100;
+  };
+
+  const calculateCurrentPrice = (position: Position) => {
+    if (
+      !position.entry_price ||
+      position.pnl == null ||
+      !position.size ||
+      position.size === 0
+    ) {
+      return null;
+    }
+
+    // Calculate price change per unit
+    const priceChangePerUnit = position.pnl / position.size;
+
+    // For long positions: Current Price = Entry Price + (PNL / Position Size)
+    // For short positions: Current Price = Entry Price - (PNL / Position Size)
+    const currentPrice = position.is_long
+      ? position.entry_price + priceChangePerUnit
+      : position.entry_price - priceChangePerUnit;
+
+    return currentPrice;
   };
 
   if (error) {
@@ -525,7 +618,7 @@ const PositionsTable = () => {
             </div>
           </div>
 
-          {/* Filter Dropdowns */}
+          {/* Filter Dropdowns and Column Visibility */}
           <div className="flex flex-wrap gap-4 items-center">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
@@ -657,120 +750,278 @@ const PositionsTable = () => {
                 Clear Filters
               </Button>
             )}
+
+            {/* Column Visibility Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Columns
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.id}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("id", checked)
+                  }
+                >
+                  ID
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.asset}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("asset", checked)
+                  }
+                >
+                  Asset
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.size}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("size", checked)
+                  }
+                >
+                  Size
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.entry_price}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("entry_price", checked)
+                  }
+                >
+                  Entry Price
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.leverage}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("leverage", checked)
+                  }
+                >
+                  Leverage
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.initial_value}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("initial_value", checked)
+                  }
+                >
+                  Initial Value
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.current_price}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("current_price", checked)
+                  }
+                >
+                  Current Price
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.direction}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("direction", checked)
+                  }
+                >
+                  Direction
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.pnl}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("pnl", checked)
+                  }
+                >
+                  P&L
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.pnl_percentage}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("pnl_percentage", checked)
+                  }
+                >
+                  P&L %
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.status}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("status", checked)
+                  }
+                >
+                  Status
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.created_at}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("created_at", checked)
+                  }
+                >
+                  Created
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.updated_at}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("updated_at", checked)
+                  }
+                >
+                  Updated
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility.address}
+                  onCheckedChange={(checked) =>
+                    handleColumnVisibilityChange("address", checked)
+                  }
+                >
+                  Address
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("id")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    ID{renderSortIcon("id")}
-                  </Button>
-                </TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("asset")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Asset{renderSortIcon("asset")}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("size")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Size{renderSortIcon("size")}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("entry_price")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Entry Price{renderSortIcon("entry_price")}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("leverage")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Leverage{renderSortIcon("leverage")}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-center">
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("is_long")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Direction{renderSortIcon("is_long")}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("pnl")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    P&L{renderSortIcon("pnl")}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("pnl_percentage")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    P&L %{renderSortIcon("pnl_percentage")}
-                  </Button>
-                </TableHead>
-                <TableHead className="text-center">
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("status")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Status{renderSortIcon("status")}
-                  </Button>
-                </TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("created_at")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Created{renderSortIcon("created_at")}
-                  </Button>
-                </TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("updated_at")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Updated{renderSortIcon("updated_at")}
-                  </Button>
-                </TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleSort("address")}
-                    className="h-auto p-0 font-medium"
-                  >
-                    Address{renderSortIcon("address")}
-                  </Button>
-                </TableHead>
+                {columnVisibility.id && (
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("id")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      ID{renderSortIcon("id")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.asset && (
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("asset")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Asset{renderSortIcon("asset")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.size && (
+                  <TableHead className="text-right">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("size")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Size{renderSortIcon("size")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.entry_price && (
+                  <TableHead className="text-right">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("entry_price")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Entry Price{renderSortIcon("entry_price")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.leverage && (
+                  <TableHead className="text-right">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("leverage")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Leverage{renderSortIcon("leverage")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.initial_value && (
+                  <TableHead className="text-right">
+                    <span className="font-medium">Initial Value</span>
+                  </TableHead>
+                )}
+                {columnVisibility.current_price && (
+                  <TableHead className="text-right">
+                    <span className="font-medium">Current Price</span>
+                  </TableHead>
+                )}
+                {columnVisibility.direction && (
+                  <TableHead className="text-center">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("is_long")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Direction{renderSortIcon("is_long")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.pnl && (
+                  <TableHead className="text-right">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("pnl")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      P&L{renderSortIcon("pnl")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.pnl_percentage && (
+                  <TableHead className="text-right">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("pnl_percentage")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      P&L %{renderSortIcon("pnl_percentage")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.status && (
+                  <TableHead className="text-center">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("status")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Status{renderSortIcon("status")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.created_at && (
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("created_at")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Created{renderSortIcon("created_at")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.updated_at && (
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("updated_at")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Updated{renderSortIcon("updated_at")}
+                    </Button>
+                  </TableHead>
+                )}
+                {columnVisibility.address && (
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort("address")}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Address{renderSortIcon("address")}
+                    </Button>
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -779,128 +1030,207 @@ const PositionsTable = () => {
                   .fill(0)
                   .map((_, index) => (
                     <TableRow key={index}>
-                      <TableCell>
-                        <Skeleton className="h-6 w-16" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-20" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-6 w-16 ml-auto" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-6 w-24 ml-auto" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-6 w-16 ml-auto" />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Skeleton className="h-6 w-16 mx-auto" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-6 w-24 ml-auto" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-6 w-16 ml-auto" />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Skeleton className="h-6 w-16 mx-auto" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-20" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-20" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-32" />
-                      </TableCell>
+                      {columnVisibility.id && (
+                        <TableCell>
+                          <Skeleton className="h-6 w-16" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.asset && (
+                        <TableCell>
+                          <Skeleton className="h-6 w-20" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.size && (
+                        <TableCell className="text-right">
+                          <Skeleton className="h-6 w-16 ml-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.entry_price && (
+                        <TableCell className="text-right">
+                          <Skeleton className="h-6 w-24 ml-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.leverage && (
+                        <TableCell className="text-right">
+                          <Skeleton className="h-6 w-16 ml-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.initial_value && (
+                        <TableCell className="text-right">
+                          <Skeleton className="h-6 w-24 ml-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.current_price && (
+                        <TableCell className="text-right">
+                          <Skeleton className="h-6 w-24 ml-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.direction && (
+                        <TableCell className="text-center">
+                          <Skeleton className="h-6 w-16 mx-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.pnl && (
+                        <TableCell className="text-right">
+                          <Skeleton className="h-6 w-24 ml-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.pnl_percentage && (
+                        <TableCell className="text-right">
+                          <Skeleton className="h-6 w-16 ml-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.status && (
+                        <TableCell className="text-center">
+                          <Skeleton className="h-6 w-16 mx-auto" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.created_at && (
+                        <TableCell>
+                          <Skeleton className="h-6 w-20" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.updated_at && (
+                        <TableCell>
+                          <Skeleton className="h-6 w-20" />
+                        </TableCell>
+                      )}
+                      {columnVisibility.address && (
+                        <TableCell>
+                          <Skeleton className="h-6 w-32" />
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
               ) : paginatedPositions.length > 0 ? (
                 paginatedPositions.map((position) => (
                   <TableRow key={position.id} className="hover:bg-muted/50">
-                    <TableCell className="font-mono text-sm">
-                      {position.id ?? "N/A"}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {position.asset ?? "N/A"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {position.size?.toLocaleString() ?? "N/A"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {position.entry_price != null
-                        ? formatCurrency(position.entry_price)
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {position.leverage != null
-                        ? `${position.leverage}x`
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge
-                        variant={position.is_long ? "default" : "secondary"}
-                      >
-                        {position.is_long ? "Long" : "Short"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span
-                        className={
-                          (position.pnl ?? 0) >= 0
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }
-                      >
-                        {position.pnl != null
-                          ? formatCurrency(position.pnl)
+                    {columnVisibility.id && (
+                      <TableCell className="font-mono text-sm">
+                        {position.id ?? "N/A"}
+                      </TableCell>
+                    )}
+                    {columnVisibility.asset && (
+                      <TableCell className="font-medium">
+                        {position.asset ?? "N/A"}
+                      </TableCell>
+                    )}
+                    {columnVisibility.size && (
+                      <TableCell className="text-right">
+                        {position.size?.toLocaleString() ?? "N/A"}
+                      </TableCell>
+                    )}
+                    {columnVisibility.entry_price && (
+                      <TableCell className="text-right">
+                        {position.entry_price != null
+                          ? formatCurrency(position.entry_price)
                           : "N/A"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge
-                        variant={
-                          (position.pnl_percentage ?? 0) >= 0
-                            ? "default"
-                            : "destructive"
-                        }
-                      >
-                        {position.pnl_percentage != null
-                          ? formatPercentage(position.pnl_percentage)
+                      </TableCell>
+                    )}
+                    {columnVisibility.leverage && (
+                      <TableCell className="text-right">
+                        {position.leverage != null
+                          ? `${position.leverage}x`
                           : "N/A"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge
-                        variant={
-                          position.status === "active" ? "default" : "secondary"
-                        }
-                      >
-                        {position.status ?? "N/A"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {position.created_at
-                        ? new Date(position.created_at).toLocaleDateString()
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {position.updated_at
-                        ? new Date(position.updated_at).toLocaleDateString()
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {position.address
-                        ? `${position.address.slice(0, 6)}...${position.address.slice(-4)}`
-                        : "N/A"}
-                    </TableCell>
+                      </TableCell>
+                    )}
+                    {columnVisibility.initial_value && (
+                      <TableCell className="text-right">
+                        {calculateInitialValue(position) != null
+                          ? formatCurrency(calculateInitialValue(position)!)
+                          : "N/A"}
+                      </TableCell>
+                    )}
+                    {columnVisibility.current_price && (
+                      <TableCell className="text-right">
+                        {calculateCurrentPrice(position) != null
+                          ? formatCurrency(calculateCurrentPrice(position)!)
+                          : "N/A"}
+                      </TableCell>
+                    )}
+                    {columnVisibility.direction && (
+                      <TableCell className="text-center">
+                        <Badge
+                          variant={position.is_long ? "default" : "secondary"}
+                        >
+                          {position.is_long ? "Long" : "Short"}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    {columnVisibility.pnl && (
+                      <TableCell className="text-right">
+                        <span
+                          className={
+                            (position.pnl ?? 0) >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }
+                        >
+                          {position.pnl != null
+                            ? formatCurrency(position.pnl)
+                            : "N/A"}
+                        </span>
+                      </TableCell>
+                    )}
+                    {columnVisibility.pnl_percentage && (
+                      <TableCell className="text-right">
+                        <Badge
+                          variant={
+                            (calculateCorrectPnlPercentage(position) ?? 0) >= 0
+                              ? "default"
+                              : "destructive"
+                          }
+                        >
+                          {calculateCorrectPnlPercentage(position) != null
+                            ? formatPercentage(
+                                calculateCorrectPnlPercentage(position)!,
+                              )
+                            : "N/A"}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    {columnVisibility.status && (
+                      <TableCell className="text-center">
+                        <Badge
+                          variant={
+                            position.status === "active"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {position.status ?? "N/A"}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    {columnVisibility.created_at && (
+                      <TableCell className="text-sm text-muted-foreground">
+                        {position.created_at
+                          ? new Date(position.created_at).toLocaleDateString()
+                          : "N/A"}
+                      </TableCell>
+                    )}
+                    {columnVisibility.updated_at && (
+                      <TableCell className="text-sm text-muted-foreground">
+                        {position.updated_at
+                          ? new Date(position.updated_at).toLocaleDateString()
+                          : "N/A"}
+                      </TableCell>
+                    )}
+                    {columnVisibility.address && (
+                      <TableCell className="font-mono text-xs">
+                        {position.address ?? "N/A"}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8">
+                  <TableCell
+                    colSpan={
+                      Object.values(columnVisibility).filter(Boolean).length
+                    }
+                    className="text-center py-8"
+                  >
                     {filteredAndSortedPositions.length === 0
                       ? filters.search ||
                         filters.status !== "all" ||
